@@ -138,11 +138,21 @@ def atualizar_atividade(atividade_id: str, dados: dict[str, Any]) -> dict[str, A
     if not campos:
         return existente
 
-    # duração PERT recalculada se os três parâmetros ficarem completos após o update
-    otimista = dados.get("duracao_otimista", existente.get("duracao_otimista"))
-    provavel = dados.get("duracao_provavel", existente.get("duracao_provavel"))
-    pessimista = dados.get("duracao_pessimista", existente.get("duracao_pessimista"))
-    if "duracao_dias" not in dados:
+    # Duração PERT recalculada SÓ quando esta chamada mexe em pelo menos um
+    # dos 3 parâmetros — nunca como efeito colateral de atualizar um campo
+    # não relacionado (ex.: só percentual_concluido). Sem essa guarda, um
+    # duracao_dias definido manualmente por cima de uma atividade que também
+    # tem otimista/provável/pessimista salvos (de quando foi criada) seria
+    # silenciosamente revertido pro valor PERT no primeiro update seguinte
+    # que não mexesse em duração nenhuma.
+    mexeu_em_pert = any(
+        campo in dados
+        for campo in ("duracao_otimista", "duracao_provavel", "duracao_pessimista")
+    )
+    if mexeu_em_pert and "duracao_dias" not in dados:
+        otimista = dados.get("duracao_otimista", existente.get("duracao_otimista"))
+        provavel = dados.get("duracao_provavel", existente.get("duracao_provavel"))
+        pessimista = dados.get("duracao_pessimista", existente.get("duracao_pessimista"))
         derivada = duracao_esperada_pert(otimista, provavel, pessimista)
         if derivada is not None:
             campos.append("duracao_dias = ?")

@@ -45,6 +45,28 @@ def test_criar_dependencia_tipo_invalido(db):
         db.criar_dependencia(a1["id"], a2["id"], tipo="XX")
 
 
+def test_criar_dependencia_projetos_diferentes_falha(db):
+    a1 = db.criar_atividade({"eap_ref": "1.1", "nome": "A", "duracao_dias": 2, "project_id": "obra-x"})
+    a2 = db.criar_atividade({"eap_ref": "1.1", "nome": "B", "duracao_dias": 3, "project_id": "obra-y"})
+    with pytest.raises(ValueError, match="projetos diferentes"):
+        db.criar_dependencia(a1["id"], a2["id"])
+
+
+def test_atualizar_atividade_percentual_nao_reverte_duracao_manual(db):
+    """Regressão: atividade criada com PERT (duracao_dias derivado), depois
+    o usuário sobrescreve manualmente com um valor fixo. Uma atualização
+    posterior que NÃO mexe em duração (ex.: só percentual_concluido) não
+    pode reverter esse override de volta pro valor PERT."""
+    a = db.criar_atividade({
+        "eap_ref": "1.1", "nome": "X",
+        "duracao_otimista": 2, "duracao_provavel": 4, "duracao_pessimista": 12,
+    })
+    assert a["duracao_dias"] == 5.0
+    db.atualizar_atividade(a["id"], {"duracao_dias": 7})
+    atualizado = db.atualizar_atividade(a["id"], {"percentual_concluido": 50})
+    assert atualizado["duracao_dias"] == 7  # não pode voltar pra 5.0
+
+
 def test_criar_dependencia_autodependencia_falha(db):
     a1 = db.criar_atividade({"eap_ref": "1.1", "nome": "A", "duracao_dias": 2})
     with pytest.raises(ValueError, match="ela mesma"):

@@ -36,6 +36,14 @@ def criar_dependencia(
         raise ValueError(f"Atividade sucessora '{sucessora_id}' não encontrada.")
 
     pid = project_id or pred.get("project_id") or DEFAULT_PROJECT_ID
+    if pred.get("project_id") != suc.get("project_id"):
+        raise ValueError(
+            f"Predecessora e sucessora pertencem a projetos diferentes "
+            f"('{pred.get('project_id')}' e '{suc.get('project_id')}'). "
+            "Dependências só podem ligar atividades do mesmo projeto — "
+            "senão o cálculo do caminho crítico ignora a dependência "
+            "silenciosamente (ele calcula projeto por projeto)."
+        )
 
     # Detecção de ciclo: se sucessora já alcança a predecessora (BFS na rede
     # atual + a nova aresta), rejeita — cronograma com ciclo é indefinido.
