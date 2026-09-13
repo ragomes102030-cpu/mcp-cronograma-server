@@ -14,6 +14,7 @@ import sys
 from typing import Annotated, Any, Callable
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.server import TransportSecuritySettings
 from pydantic import Field
 
 import models
@@ -30,6 +31,18 @@ mcp = FastMCP(
         "atividades, calcular_caminho_critico para obter ES/EF/LS/LF e "
         "folgas, salvar_baseline/comparar_baseline para acompanhar desvio "
         "de prazo, e curva_s para progresso acumulado planejado x realizado."
+    ),
+    transport_security=TransportSecuritySettings(
+        # Mantém a proteção contra DNS rebinding LIGADA (padrão recomendado
+        # para produção) e só autoriza os hosts específicos deste serviço —
+        # diferente do mcp-eap-server, que desativa a proteção inteira
+        # (enable_dns_rebinding_protection=False). Essa é a correção mais
+        # segura das duas: nenhum outro Host consegue rotear pra esse
+        # servidor, mesmo sem autenticação implementada ainda.
+        allowed_hosts=[
+            "mcp-cronograma-server.onrender.com",
+            "localhost:*", "127.0.0.1:*",
+        ],
     ),
 )
 
