@@ -20,9 +20,17 @@ import models
 import schemas
 
 mcp = FastMCP(
-    "cronograma",
-    stateless_http=True,
-    json_response=True,
+    name="cronograma-server",
+    instructions=(
+        "Servidor MCP de cronograma (PERT/CPM), seguindo o roteiro de "
+        "Aldo Dorea Mattos: atividades, duracoes, precedencia, caminho "
+        "critico, folgas, linha de base e curva S. Cada atividade referencia "
+        "um no da EAP via eap_ref (uid ou eap_id do mcp-eap-server). Use "
+        "criar_atividade para cadastrar, criar_dependencia para ligar "
+        "atividades, calcular_caminho_critico para obter ES/EF/LS/LF e "
+        "folgas, salvar_baseline/comparar_baseline para acompanhar desvio "
+        "de prazo, e curva_s para progresso acumulado planejado x realizado."
+    ),
 )
 
 
