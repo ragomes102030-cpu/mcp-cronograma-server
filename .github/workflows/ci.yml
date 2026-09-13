@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Sintaxe e checagens basicas (F/E9)
+        run: |
+          python -m py_compile models/*.py schemas.py server.py
+          python -m ruff check --select F,E9 models schemas.py server.py tests
+      - name: Testes com gate de cobertura
+        run: |
+          python -m pytest tests/ -q --cov=models --cov-report=term-missing --cov-fail-under=70
