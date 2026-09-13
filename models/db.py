@@ -1,19 +1,19 @@
-"""Conexão SQLite e schema do cronograma (PERT/CPM).
+"""Conexão SQLite/Turso e schema do cronograma (PERT/CPM).
 
-Segue o mesmo padrão do mcp-eap-server: SQLite local por padrão, com
-possibilidade futura de apontar para Turso (mesma técnica de wrapper, não
-implementada ainda nesta v1 — ver TODO em ``_connect``).
+Mesmo padrão do mcp-eap-server: SQLite local por padrão; se ``TURSO_URL``/
+``TURSO_TOKEN`` estiverem configuradas, usa Turso via ``libsql_client`` —
+necessário porque o disco do Render não é persistente entre deploys (um
+redeploy apagaria o banco local, perdendo atividades/dependências/baseline).
 
 Cada atividade referencia um ``eap_id``/``uid`` do mcp-eap-server por
 STRING (``eap_ref``), nunca por chave estrangeira de banco — os dois
-serviços não compartilham banco de dados. A validação de que o ``eap_ref``
-realmente existe na EAP é responsabilidade da camada de tools
-(``server.py``), que pode chamar o mcp-eap-server via HTTP quando
-``EAP_SERVER_URL`` estiver configurada (ver ``eap_client.py``).
+serviços não compartilham banco de dados nem Turso (cada um com seu
+próprio banco remoto).
 """
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -23,6 +23,9 @@ from typing import Any
 DB_PATH = Path(__file__).resolve().parent.parent / "cronograma.db"
 
 DEFAULT_PROJECT_ID = "default"
+
+_TURSO_URL = os.environ.get("TURSO_URL", "")
+_TURSO_TOKEN = os.environ.get("TURSO_TOKEN", "")
 
 
 SCHEMA = """
@@ -110,19 +113,87 @@ def _to_list(rows: list[Any]) -> list[dict[str, Any]]:
     return [dict(r) if not isinstance(r, dict) else r for r in rows]
 
 
-def _connect() -> sqlite3.Connection:
-    """Abre conexão SQLite local.
+def _normalizar_turso_url(url: str) -> str:
+    """Turso novos (ex.: *.aws-us-east-1.turso.io) recusam o handshake
+    WebSocket do Hrana (400); o transporte HTTP (https://) funciona.
+    Converte o scheme ``libsql://``/``ws(s)://`` em ``http(s)://``.
+    """
+    if url.startswith("libsql://"):
+        return "https://" + url[len("libsql://"):]
+    if url.startswith("wss://"):
+        return "https://" + url[len("wss://"):]
+    if url.startswith("ws://"):
+        return "http://" + url[len("ws://"):]
+    return url
+
+
+_turso_client: Any = None
+
+
+def _get_turso_client() -> Any:
+    """ClientSync único (evita vazar uma sessão aiohttp a cada _connect())."""
+    global _turso_client
+    if _turso_client is None:
+        import libsql_client
+        _turso_client = libsql_client.create_client_sync(
+            url=_normalizar_turso_url(_TURSO_URL), auth_token=_TURSO_TOKEN
+        )
+    return _turso_client
+
+
+class _TursoConn:
+    """Wrapper que emula a API sqlite3 usando libsql_client (Turso)."""
+
+    def __init__(self) -> None:
+        self._client = _get_turso_client()
+
+    def execute(self, sql: str, params: tuple = ()) -> "_TursoCursor":
+        converted = sql
+        for i, _ in enumerate(params, start=1):
+            converted = converted.replace("?", f":{i}", 1)
+        result = self._client.execute(converted, list(params))
+        return _TursoCursor(result)
+
+    def executescript(self, script: str) -> None:
+        for stmt in script.split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                self.execute(stmt)
+
+    def commit(self) -> None:
+        pass
+
+    def __enter__(self) -> "_TursoConn":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        pass
+
+
+class _TursoCursor:
+    """Wrapper de resultado que emula .fetchone() / .fetchall() do sqlite3."""
+
+    def __init__(self, result: Any) -> None:
+        self._rows = [dict(zip(result.columns, row)) for row in result.rows]
+
+    def fetchone(self) -> dict[str, Any] | None:
+        return self._rows[0] if self._rows else None
+
+    def fetchall(self) -> list[dict[str, Any]]:
+        return self._rows
+
+
+def _connect() -> "_TursoConn | sqlite3.Connection":
+    """Abre conexão: Turso (se ``TURSO_URL`` configurada) ou sqlite3 local.
 
     Resolve ``DB_PATH`` via ``from . import DB_PATH`` (não a constante deste
     módulo) de propósito: assim ``monkeypatch.setattr(models, "DB_PATH", ...)``
     nos testes (que altera o atributo do PACOTE) isola o banco corretamente
     mesmo com a lógica de conexão morando em ``db.py`` (mesma lição aprendida
     da mesma armadilha no mcp-eap-server).
-
-    TODO (v2): suporte a Turso via o mesmo wrapper HTTP usado no
-    mcp-eap-server, quando este serviço precisar de persistência que
-    sobreviva a redeploy sem disco persistente.
     """
+    if _TURSO_URL:
+        return _TursoConn()
     from . import DB_PATH as _db_path
     conn = sqlite3.connect(_db_path)
     conn.row_factory = sqlite3.Row

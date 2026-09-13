@@ -57,8 +57,11 @@ rejeita se fechar um ciclo na rede).
 - **Validação cruzada ao vivo contra o mcp-eap-server**: `eap_ref` é
   aceito como string opaca, sem checar se o nó realmente existe na EAP no
   momento da criação da atividade (ver TODO em `models/db.py`).
-- **Turso/persistência remota**: usa SQLite local (mesma ressalva do
-  mcp-eap-server sobre efemeridade em disco não-persistente do Render).
+- **Turso/persistência remota**: já suportado (mesmo wrapper HTTP do
+  mcp-eap-server) — configure `TURSO_URL`/`TURSO_TOKEN` no ambiente. Sem
+  essas variáveis, cai no SQLite local (efêmero no Render — some a cada
+  redeploy). **Use um banco Turso diferente do usado pelo mcp-eap-server**
+  (não compartilhe o mesmo banco entre os dois serviços).
 - **Autenticação**: mesma pendência do mcp-eap-server, ainda não resolvida
   em nenhum dos dois serviços.
 

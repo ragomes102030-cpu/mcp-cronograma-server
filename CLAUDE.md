@@ -13,6 +13,14 @@ importa `mcp`/`schemas`. Dentro de `models/`, `cpm.py` só lê (via
 `listar_atividades`/`listar_dependencias`) e escreve resultado via
 `salvar_resultado_cpm` — não faz SQL direto.
 
+## Persistência: Turso em produção
+
+Igual ao mcp-eap-server: sem `TURSO_URL`/`TURSO_TOKEN`, usa SQLite local —
+que **some a cada redeploy no Render** (disco não-persistente). Configure
+essas duas variáveis de ambiente no Render pra persistir de verdade.
+Use um banco Turso **separado** do mcp-eap-server (bancos diferentes, não
+o mesmo — os dois serviços não devem compartilhar schema nem dados).
+
 ## Armadilha já conhecida: `DB_PATH` e monkeypatch nos testes
 
 `models/db.py._connect()` resolve `DB_PATH` via `from . import DB_PATH`
