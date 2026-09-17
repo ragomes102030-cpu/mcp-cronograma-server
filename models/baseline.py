@@ -15,6 +15,16 @@ def salvar_baseline(project_id: str, nome: str) -> dict[str, Any]:
     atividades = listar_atividades(project_id)
     if not atividades:
         raise ValueError(f"Projeto '{project_id}' não tem atividades para congelar.")
+    # Valida que todas as atividades têm duração antes de congelar
+    sem_duracao = [a["id"] for a in atividades if a.get("duracao_dias") is None]
+    if sem_duracao:
+        raise ValueError(
+            f"Não é possível salvar baseline: {len(sem_duracao)} atividade(s) "
+            f"sem duração definida (nem duracao_dias, nem PERT completo): "
+            f"{', '.join(sem_duracao[:5])}"
+            + ("..." if len(sem_duracao) > 5 else "") +
+            f". Adicione duração ou rode calcular_caminho_critico antes de salvar."
+        )
     bid = _gerar_id("bl")
     with _connect() as conn:
         conn.execute(

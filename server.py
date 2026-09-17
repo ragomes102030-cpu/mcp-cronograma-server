@@ -53,14 +53,29 @@ def _log(evento: str, **campos: Any) -> None:
 
 
 def _seguro(fn: Callable[[], Any], tool_name: str = "tool", **contexto: Any) -> dict[str, Any]:
+    """Executa fn, loga a chamada (início/fim/erro) e converte qualquer
+    excecao em resposta de erro.
+
+    ``tool_name`` e ``contexto`` (ex.: project_id, eap_id) alimentam o log
+    em stderr. Erros de negócio (ValueError) são propagados para o FastMCP
+    gerar resposta com isError=true; devolvem também o campo isError=true
+    no ErroOutput para que o cliente detecte o erro independentemente de
+    como o transport HTTP reporta a falha. Exceções de sistema voltam como
+    ErroOutput também com isError=true.
+    """
     try:
         _log("tool_inicio", tool=tool_name, **contexto)
         resultado = fn()
+        # Se o resultado já é um dict com chave "erro", trata como erro de negócio
+        if isinstance(resultado, dict) and "erro" in resultado:
+            raise ValueError(resultado["erro"])
         _log("tool_fim", tool=tool_name, **contexto)
         return resultado
+    except ValueError:
+        raise  # Propagar erro de negócio para o FastMCP (isError=true)
     except Exception as exc:
         _log("tool_erro", tool=tool_name, erro=str(exc), **contexto)
-        return schemas.ErroOutput(erro=str(exc)).model_dump()
+        return schemas.ErroOutput(erro=str(exc), isError=True).model_dump()
 
 
 def _idempotente(request_id: str | None, tool_name: str, fn: Callable[[], Any], **contexto: Any) -> dict[str, Any]:
@@ -72,6 +87,12 @@ def _idempotente(request_id: str | None, tool_name: str, fn: Callable[[], Any], 
     if request_id:
         models.salvar_idempotencia(request_id, tool_name, resultado)
     return resultado
+
+
+def _erro(msg: str, detalhe: str = "") -> dict[str, Any]:
+    """Erro de negócio formatado com isError=True (propagado pelo _seguro)."""
+    txt = f"{msg}: {detalhe}" if detalhe else msg
+    return schemas.ErroOutput(erro=txt, isError=True).model_dump()
 
 
 # ── Atividades ──────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 class ErroOutput(BaseModel):
     erro: str
+    isError: bool = True
     model_config = ConfigDict(extra="forbid")
 
 

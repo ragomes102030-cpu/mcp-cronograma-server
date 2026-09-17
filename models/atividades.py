@@ -55,7 +55,12 @@ def criar_atividade(dados: dict[str, Any]) -> dict[str, Any]:
             dados.get("duracao_provavel"),
             dados.get("duracao_pessimista"),
         )
-    if duracao is not None and duracao < 0:
+    if duracao is None:
+        raise ValueError(
+            "Atividade sem duração: informe duracao_dias ou complete o PERT "
+            "(duracao_otimista + duracao_provavel + duracao_pessimista)."
+        )
+    if duracao < 0:
         raise ValueError("duracao_dias não pode ser negativa.")
 
     aid = _gerar_id("atv")
