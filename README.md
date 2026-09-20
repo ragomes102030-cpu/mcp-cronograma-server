@@ -72,3 +72,5 @@ pip install -r requirements.txt -r requirements-dev.txt
 python -m pytest tests/ -q
 uvicorn server:app --reload
 ```
+
+O endpoint `GET /healthz` retorna `{"ok": true}` para probes de disponibilidade.

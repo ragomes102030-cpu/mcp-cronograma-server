@@ -16,6 +16,8 @@ from typing import Annotated, Any, Callable
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.server import TransportSecuritySettings
 from pydantic import Field
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 import models
 import schemas
@@ -294,6 +296,13 @@ def curva_s(project_id: Annotated[str | None, Field(description="Projeto (obra).
 models.init_db()
 
 app = mcp.streamable_http_app()
+
+
+async def healthz(_request: Any) -> JSONResponse:
+    return JSONResponse({"ok": True, "service": "mcp-cronograma-server"})
+
+
+app.routes.append(Route("/healthz", healthz, methods=["GET"]))
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8000"))

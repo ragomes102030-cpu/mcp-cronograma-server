@@ -56,9 +56,8 @@ def test_caminho_critico_sem_atividades_falha(db):
 
 
 def test_caminho_critico_atividade_sem_duracao_falha(db):
-    db.criar_atividade({"eap_ref": "1.1", "nome": "Sem duração"})
     with pytest.raises(ValueError, match="sem duração"):
-        db.calcular_caminho_critico(db.DEFAULT_PROJECT_ID)
+        db.criar_atividade({"eap_ref": "1.1", "nome": "Sem duração"})
 
 
 def test_caminho_critico_atividade_isolada(db):

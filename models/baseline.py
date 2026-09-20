@@ -23,7 +23,7 @@ def salvar_baseline(project_id: str, nome: str) -> dict[str, Any]:
             f"sem duração definida (nem duracao_dias, nem PERT completo): "
             f"{', '.join(sem_duracao[:5])}"
             + ("..." if len(sem_duracao) > 5 else "") +
-            f". Adicione duração ou rode calcular_caminho_critico antes de salvar."
+            ". Adicione duração ou rode calcular_caminho_critico antes de salvar."
         )
     bid = _gerar_id("bl")
     with _connect() as conn:
