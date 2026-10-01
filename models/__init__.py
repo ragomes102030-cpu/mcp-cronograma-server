@@ -16,6 +16,7 @@ from .atividades import (
     duracao_esperada_pert,
     desvio_padrao_pert,
     listar_atividades,
+    validar_eap_ref,
 )
 from .baseline import comparar_baseline, listar_baselines, salvar_baseline
 from .calendario import gerar_datas, somar_dias_uteis
@@ -33,7 +34,7 @@ from .idempotencia import salvar_idempotencia, verificar_idempotencia
 
 __all__ = [
     "atualizar_atividade", "buscar_atividade", "contar_atividades", "criar_atividade",
-    "deletar_atividade", "duracao_esperada_pert", "desvio_padrao_pert", "listar_atividades",
+    "deletar_atividade", "duracao_esperada_pert", "desvio_padrao_pert", "listar_atividades", "validar_eap_ref",
     "comparar_baseline", "listar_baselines", "salvar_baseline",
     "gerar_datas", "somar_dias_uteis",
     "RedeInvalidaError", "calcular_caminho_critico",

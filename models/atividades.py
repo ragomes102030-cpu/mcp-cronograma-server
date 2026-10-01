@@ -10,6 +10,10 @@ esperado por (O + 4M + P) / 6, a fórmula clássica do método).
 from __future__ import annotations
 
 from typing import Any
+import json
+import os
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 from .db import DEFAULT_PROJECT_ID, _agora_iso, _connect, _gerar_id, _to_dict, _to_list
 
@@ -19,6 +23,37 @@ CAMPOS_ATUALIZAVEIS = (
     "data_inicio_planejada", "data_fim_planejada",
     "data_inicio_real", "data_fim_real",
 )
+
+
+
+
+def validar_eap_ref(project_id: str, eap_ref: str) -> dict[str, Any]:
+    """Confirma a existência do eap_ref no MCP-EAP.
+
+    A validação é fail-closed: produção deve configurar EAP_SERVER_URL.
+    Isso evita que uma atividade seja criada sem rastreabilidade quando a
+    integração estiver ausente ou indisponível.
+    """
+    base = (os.environ.get("EAP_SERVER_URL") or "").strip().rstrip("/")
+    if not base:
+        raise ValueError(
+            "EAP_SERVER_URL não configurada; não é permitido criar atividade "
+            "sem validar sua referência na EAP."
+        )
+    url = f"{base}/internal/eap-node?{urlencode({'project_id': project_id, 'eap_ref': eap_ref})}"
+    try:
+        req = Request(url, headers={"Accept": "application/json"}, method="GET")
+        with urlopen(req, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        raise ValueError(
+            f"Não foi possível validar eap_ref '{eap_ref}' no MCP-EAP: {exc}"
+        ) from exc
+    if not payload.get("encontrado"):
+        raise ValueError(
+            f"eap_ref '{eap_ref}' não existe no projeto '{project_id}' no MCP-EAP."
+        )
+    return payload
 
 
 def duracao_esperada_pert(
@@ -48,6 +83,9 @@ def criar_atividade(dados: dict[str, Any]) -> dict[str, Any]:
     if not (dados.get("nome") or "").strip():
         raise ValueError("nome é obrigatório.")
 
+    project_id = dados.get("project_id") or DEFAULT_PROJECT_ID
+    validar_eap_ref(project_id, dados["eap_ref"].strip())
+
     duracao = dados.get("duracao_dias")
     if duracao is None:
         duracao = duracao_esperada_pert(
@@ -64,7 +102,6 @@ def criar_atividade(dados: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("duracao_dias não pode ser negativa.")
 
     aid = _gerar_id("atv")
-    project_id = dados.get("project_id") or DEFAULT_PROJECT_ID
     with _connect() as conn:
         conn.execute(
             """
