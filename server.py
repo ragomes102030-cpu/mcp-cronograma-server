@@ -320,7 +320,80 @@ def calcular_duracao_com_evidencia(
     import math
     return {"duracaoDias": math.ceil(quantidade / produtividade), "quantidade": quantidade, "produtividade": produtividade, "unidade": unidade, "metodo":"teto(quantidade/produtividade)", "evidenceLevel":"source_supported" if fonte and fonte.strip() else "engineer_informed", "fonte":fonte, "premissa":"produtividade expressa em quantidade por dia para a equipe considerada", "nao_inventar":True}
 
-if __name__ == "__main__":
+
+
+@mcp.tool()
+def calcular_cpm_com_evidencia(
+    atividades: list[dict[str, Any]],
+    dependencias: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Calcula CPM em memória, sem depender do banco ou de outro MCP.
+
+    Entrada mínima: atividades com id e duracao_dias; dependências com
+    predecessora_id, sucessora_id, tipo (TI/II/TT/IT) e lag_dias.
+    A ferramenta rejeita ciclos e dados inválidos e retorna a cadeia crítica
+    como evidência determinística. Não inventa duração nem produtividade.
+    """
+    def _executar() -> dict[str, Any]:
+        import math
+        if not isinstance(atividades, list) or not isinstance(dependencias, list):
+            raise ValueError("atividades e dependencias devem ser listas")
+        ids = [str(a.get("id")) for a in atividades]
+        if len(ids) != len(set(ids)) or any(x in ("None", "") for x in ids):
+            raise ValueError("cada atividade precisa de id único")
+        dur = {}
+        for a in atividades:
+            d = a.get("duracao_dias")
+            if not isinstance(d, (int, float)) or not math.isfinite(float(d)) or d <= 0:
+                raise ValueError("cada atividade precisa de duracao_dias > 0")
+            dur[str(a["id"])] = float(d)
+        edges = []
+        for dep in dependencias:
+            p = str(dep.get("predecessora_id")); s = str(dep.get("sucessora_id"))
+            tipo = str(dep.get("tipo", "TI")).upper(); lag = float(dep.get("lag_dias", 0) or 0)
+            if p not in dur or s not in dur or p == s:
+                raise ValueError("dependência referencia atividade inexistente ou a própria atividade")
+            if tipo not in {"TI", "II", "TT", "IT"}:
+                raise ValueError("tipo de dependência deve ser TI, II, TT ou IT")
+            edges.append((p, s, tipo, lag))
+        indeg = {x: 0 for x in dur}
+        adj = {x: [] for x in dur}
+        for p, s, _, _ in edges:
+            adj[p].append(s); indeg[s] += 1
+        queue = [x for x, n in indeg.items() if n == 0]; order = []
+        while queue:
+            x = queue.pop(0); order.append(x)
+            for y in adj[x]:
+                indeg[y] -= 1
+                if indeg[y] == 0: queue.append(y)
+        if len(order) != len(dur):
+            raise ValueError("rede de dependências contém ciclo")
+        es = {x: 0.0 for x in dur}; ef = {x: dur[x] for x in dur}
+        for x in order:
+            for p, s, tipo, lag in edges:
+                if p != x: continue
+                if tipo == "TI": es[s] = max(es[s], ef[p] + lag)
+                elif tipo == "II": es[s] = max(es[s], es[p] + lag)
+                elif tipo == "TT": es[s] = max(es[s], ef[p] + lag - dur[s])
+                elif tipo == "IT": es[s] = max(es[s], es[p] + lag - dur[s])
+                ef[s] = es[s] + dur[s]
+        project = max(ef.values(), default=0.0)
+        lf = {x: project for x in dur}; ls = {x: project - dur[x] for x in dur}
+        for x in reversed(order):
+            for p, s, tipo, lag in edges:
+                if p != x: continue
+                if tipo == "TI": lf[p] = min(lf[p], ls[s] - lag)
+                elif tipo == "II": ls[p] = min(ls[p], ls[s] - lag); lf[p] = min(lf[p], ls[p] + dur[p])
+                elif tipo == "TT": lf[p] = min(lf[p], lf[s] - lag)
+                elif tipo == "IT": ls[p] = min(ls[p], lf[s] - lag); lf[p] = min(lf[p], ls[p] + dur[p])
+                ls[p] = min(ls[p], lf[p] - dur[p])
+        resultado = []
+        for x in order:
+            total_float = ls[x] - es[x]
+            resultado.append({"id": x, "duracao_dias": dur[x], "ES": es[x], "EF": ef[x], "LS": ls[x], "LF": lf[x], "folga_total": total_float, "critica": abs(total_float) < 1e-9})
+        return {"valid": True, "duracao_projeto_dias": project, "atividades": resultado, "caminho_critico": [x["id"] for x in resultado if x["critica"]], "evidenceLevel": "validated", "fonte": "mcp-cronograma-server", "nao_inventar": True}
+    return _seguro(_executar, "calcular_cpm_com_evidencia")
+\nif __name__ == "__main__":
     port = int(os.environ.get("PORT", "8000"))
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=port)
