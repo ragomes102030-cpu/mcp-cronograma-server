@@ -393,7 +393,8 @@ def calcular_cpm_com_evidencia(
             resultado.append({"id": x, "duracao_dias": dur[x], "ES": es[x], "EF": ef[x], "LS": ls[x], "LF": lf[x], "folga_total": total_float, "critica": abs(total_float) < 1e-9})
         return {"valid": True, "duracao_projeto_dias": project, "atividades": resultado, "caminho_critico": [x["id"] for x in resultado if x["critica"]], "evidenceLevel": "validated", "fonte": "mcp-cronograma-server", "nao_inventar": True}
     return _seguro(_executar, "calcular_cpm_com_evidencia")
-\nif __name__ == "__main__":
+
+if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8000"))
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=port)
