@@ -304,6 +304,22 @@ async def healthz(_request: Any) -> JSONResponse:
 
 app.routes.append(Route("/healthz", healthz, methods=["GET"]))
 
+@mcp.tool()
+def calcular_duracao_com_evidencia(
+    quantidade: float,
+    produtividade: float,
+    unidade: str,
+    unidade_produtividade: str,
+    fonte: str | None = None,
+) -> dict[str, Any]:
+    """Calcula duração somente com quantidade e produtividade compatíveis."""
+    if quantidade <= 0 or produtividade <= 0:
+        return {"erro": "quantidade e produtividade devem ser > 0", "isError": True}
+    if unidade.strip().lower() != unidade_produtividade.strip().lower():
+        return {"erro": "unidades incompatíveis; não há conversão automática", "isError": True}
+    import math
+    return {"duracaoDias": math.ceil(quantidade / produtividade), "quantidade": quantidade, "produtividade": produtividade, "unidade": unidade, "metodo":"teto(quantidade/produtividade)", "evidenceLevel":"source_supported" if fonte and fonte.strip() else "engineer_informed", "fonte":fonte, "premissa":"produtividade expressa em quantidade por dia para a equipe considerada", "nao_inventar":True}
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8000"))
     import uvicorn
