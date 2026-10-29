@@ -9,7 +9,9 @@ continuam no Python; apenas o transporte é adaptado para chamadas HTTP sem sess
   `Authorization: Bearer <seu-token>` no conector HTTP. Nunca versionar.
 - `TURSO_URL`: URL do banco Turso/libSQL persistente exclusivo deste MCP.
 - `TURSO_TOKEN`: token Turso deste banco. **Sem esses dois, o servidor retorna 503**.
-- `MCP_REQUIRE_TURSO=1`: garante que o health check responda 503 quando não configurado.
+- `EAP_SERVER_URL`: URL base HTTPS do MCP EAP (por exemplo `https://arquimedes-mcp-eap.vercel.app`).
+- `EAP_API_TOKEN`: o mesmo segredo `MCP_API_TOKEN` configurado **no projeto da EAP**; usado somente na consulta autenticada a `/internal/eap-node`.
+- O health check só responde 200 quando todos esses campos estiverem definidos.
 
 Defina as variáveis em produção **e** preview conforme necessidade; faça um novo
 deploy após alterar as variáveis. Não use SQLite local para dados persistentes
