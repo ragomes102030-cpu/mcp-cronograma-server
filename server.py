@@ -24,6 +24,8 @@ import schemas
 
 mcp = FastMCP(
     name="cronograma-server",
+    stateless_http=(os.environ.get("VERCEL") == "1"),
+    json_response=(os.environ.get("VERCEL") == "1"),
     instructions=(
         "Servidor MCP de cronograma (PERT/CPM), seguindo o roteiro de "
         "Aldo Dorea Mattos: atividades, duracoes, precedencia, caminho "
@@ -42,7 +44,7 @@ mcp = FastMCP(
         # segura das duas: nenhum outro Host consegue rotear pra esse
         # servidor, mesmo sem autenticação implementada ainda.
         allowed_hosts=[
-            "mcp-cronograma-server.onrender.com",
+            "mcp-cronograma-server.onrender.com", "*.vercel.app",
             "localhost:*", "127.0.0.1:*",
         ],
     ),
