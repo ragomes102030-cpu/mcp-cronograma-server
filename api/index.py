@@ -9,7 +9,7 @@ import hmac
 import json
 import os
 
-_REQUIRED_DB = ("TURSO_URL", "TURSO_TOKEN")
+_REQUIRED_DB = ("TURSO_URL", "TURSO_TOKEN", "EAP_SERVER_URL", "EAP_API_TOKEN")
 _MISSING = [key for key in ("MCP_API_TOKEN", *_REQUIRED_DB) if not os.getenv(key)]
 _mcp_app = None
 if not _MISSING:
