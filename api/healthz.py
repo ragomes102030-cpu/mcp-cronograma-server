@@ -5,7 +5,7 @@ from http.server import BaseHTTPRequestHandler
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        required = ("MCP_API_TOKEN", "TURSO_URL", "TURSO_TOKEN")
+        required = ("MCP_API_TOKEN", "TURSO_URL", "TURSO_TOKEN", "EAP_SERVER_URL", "EAP_API_TOKEN")
         ready = all(os.getenv(k) for k in required)
         body = json.dumps({"ok": ready, "configured": ready}).encode("utf-8")
         self.send_response(200 if ready else 503)
