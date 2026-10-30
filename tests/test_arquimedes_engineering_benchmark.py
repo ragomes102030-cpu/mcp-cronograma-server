@@ -154,3 +154,23 @@ def test_invalid_activity_progress_cannot_be_persisted(db):
         db.criar_atividade({"eap_ref": "1.1", "nome": "Ficticia",
                             "duracao_dias": 2, "percentual_concluido": 150})
     assert db.contar_atividades() == 0
+
+
+@pytest.mark.parametrize("lag", [float("nan"), float("inf"), -float("inf"), 1e10])
+def test_invalid_lag_rejected_before_network_write(db, lag):
+    a = db.criar_atividade({"eap_ref":"1.1", "nome":"A", "duracao_dias":2})
+    b = db.criar_atividade({"eap_ref":"1.2", "nome":"B", "duracao_dias":2})
+    with pytest.raises(ValueError, match="lag_dias"):
+        db.criar_dependencia(a["id"], b["id"], lag_dias=lag)
+    assert db.listar_dependencias() == []
+
+
+@pytest.mark.parametrize("lag", [-2, 0, 3])
+def test_signed_lag_cpm_reference(db, lag):
+    a = db.criar_atividade({"eap_ref":"1.1", "nome":"A", "duracao_dias":4})
+    b = db.criar_atividade({"eap_ref":"1.2", "nome":"B", "duracao_dias":2})
+    db.criar_dependencia(a["id"], b["id"], tipo="TI", lag_dias=lag)
+    result = db.calcular_caminho_critico(db.DEFAULT_PROJECT_ID)
+    got = {r["id"]:r for r in result["atividades"]}
+    # TI: B starts at max(0, finish(A)+lag).
+    assert got[b["id"]]["es"] == pytest.approx(4 + lag, abs=1e-6)
