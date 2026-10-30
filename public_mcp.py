@@ -92,10 +92,20 @@ def calcular_cpm_com_evidencia(atividades: list[dict], dependencias: list[dict])
     resultados=[]
     for x in ordem:
         folga=ls[x]-es[x]
+        # Folga livre: maior deslocamento que nao altera datas cedo dos
+        # sucessores nem o prazo de conclusao da obra. As restricoes
+        # generalizadas TI/II/TT/IT sao ponderadas por w.
+        margens = [prazo - ef[x]]
+        margens.extend(es[s] - es[x] - w for s,w in outgoing[x])
+        folga_livre = max(0.0, min(margens))
         resultados.append({"id":x,"duracao_dias":dur[x],"ES":round(es[x],6),
             "EF":round(ef[x],6),"LS":round(ls[x],6),"LF":round(ls[x]+dur[x],6),
-            "folga_total":round(folga,6),"critica":abs(folga)<1e-6})
+            "folga_total":round(folga,6),"folga_livre":round(folga_livre,6),
+            "critica":abs(folga)<1e-6})
+    vinculadas = {ident for p,s,_ in edges for ident in (p,s)}
+    sem_vinculo = [ident for ident in dur if ident not in vinculadas] if len(dur) > 1 else []
     return {"valid":True,"duracao_projeto_dias":round(prazo,6),
+            "atividades_sem_vinculo":sem_vinculo,
             "atividades":resultados,
             "caminho_critico":[r["id"] for r in resultados if r["critica"]],
             "origem":"dados_da_chamada","persistido":False,
