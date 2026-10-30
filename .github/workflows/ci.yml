@@ -2,13 +2,18 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, feat/claude-public-readonly-20261029, feat/quality-engineering-p1-20261030]
   pull_request:
-    branches: [master]
+    branches: [master, feat/claude-public-readonly-20261029, feat/quality-engineering-p1-20261030]
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      MCP_TARGET: cronograma
+      VERCEL: "0"
+      MCP_PUBLIC_ALLOWED_ORIGINS: https://independent-client.example
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -20,6 +25,10 @@ jobs:
         run: |
           python -m py_compile models/*.py schemas.py server.py
           python -m ruff check --select F,E9 models schemas.py server.py tests
+      # Run the stateful ASGI lifespan case once, separately, to avoid a repeat
+      # shutdown deadlock; all other tests remain in the coverage gate.
+      - name: MCP legacy and modern dual-protocol contract
+        run: python -m pytest tests/test_public_mcp_dual_protocol.py -q
       - name: Testes com gate de cobertura
         run: |
-          python -m pytest tests/ -q --cov=models --cov-report=term-missing --cov-fail-under=70
+          python -m pytest tests/ --ignore=tests/test_public_mcp_dual_protocol.py -q --cov=models --cov-report=term-missing --cov-fail-under=70
