@@ -12,7 +12,7 @@ jobs:
     env:
       MCP_TARGET: cronograma
       # Temporary immutable preview snapshot. Never point this at production.
-      MCP_BASE_URL: https://arquimedes-mcp-cronograma-2f2zo76ux-rafael-5864.vercel.app
+      MCP_BASE_URL: https://arquimedes-mcp-cronograma-mepps2cq9-rafael-5864.vercel.app
       MCP_REQUIRE_MODERN: "1"
       MCP_REPORT_PATH: artifacts/sdk2-preview-cronograma.json
     steps:
