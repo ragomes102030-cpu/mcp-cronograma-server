@@ -21,6 +21,7 @@ feriados) é responsabilidade de ``calendario.py``/``gerar_cronograma``.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from .atividades import listar_atividades, salvar_resultado_cpm
@@ -83,8 +84,30 @@ def calcular_caminho_critico(project_id: str) -> dict[str, Any]:
     deps = listar_dependencias(project_id)
     ids = [a["id"] for a in atividades]
     duracao = {a["id"]: float(a["duracao_dias"]) for a in atividades}
-    arestas = [(d["predecessora_id"], d["sucessora_id"]) for d in deps]
-    dep_por_par = {(d["predecessora_id"], d["sucessora_id"]): d for d in deps}
+    if any(not math.isfinite(d) or d <= 0 for d in duracao.values()):
+        raise RedeInvalidaError("Duracoes precisam ser positivas e finitas.")
+    if len(set(ids)) != len(ids):
+        raise RedeInvalidaError("IDs de atividades repetidos.")
+
+    # Never silently ignore orphan/cross-project edges before topological sort.
+    # Fail before any CPM result is persisted.
+    tipos = {"TI", "II", "TT", "IT"}
+    arestas = []
+    dep_por_par = {}
+    for dep in deps:
+        pred, suc = dep["predecessora_id"], dep["sucessora_id"]
+        if pred not in duracao or suc not in duracao or pred == suc:
+            raise RedeInvalidaError(f"Dependencia invalida: {pred} -> {suc} (ausente ou autorreferencia).")
+        try:
+            lag = float(dep.get("lag_dias") or 0)
+        except (TypeError, ValueError) as exc:
+            raise RedeInvalidaError("Lag invalido.") from exc
+        if not math.isfinite(lag) or (dep["tipo"] or "").upper() not in tipos:
+            raise RedeInvalidaError("Tipo de dependencia ou lag invalido.")
+        if (pred, suc) in dep_por_par:
+            raise RedeInvalidaError(f"Dependencia duplicada: {pred} -> {suc}.")
+        dep_por_par[(pred, suc)] = {**dep, "tipo": dep["tipo"].upper(), "lag_dias": lag}
+        arestas.append((pred, suc))
 
     ordem = _ordem_topologica(ids, arestas)
 
@@ -144,12 +167,24 @@ def calcular_caminho_critico(project_id: str) -> dict[str, Any]:
     resultado_por_atividade: dict[str, dict[str, Any]] = {}
     for atual in ids:
         folga_total = round(ls[atual] - es[atual], 6)
-        if sucessoras[atual]:
-            folga_livre = round(
-                min(es[suc] for suc in sucessoras[atual]) - ef[atual], 6
-            )
-        else:
-            folga_livre = folga_total
+        # A folga livre e a menor margem em cada restricao da rede.
+        # FS: ESs - (EFp+lag); SS: ESs - (ESp+lag);
+        # FF: EFs - (EFp+lag); SF: EFs - (ESp+lag).
+        # O marco de termino do projeto limita tambem atividades terminais.
+        margens = [duracao_total_projeto - ef[atual]]
+        for suc in sucessoras[atual]:
+            dep = dep_por_par[(atual, suc)]
+            lag = dep["lag_dias"]
+            tipo = dep["tipo"]
+            if tipo == "TI":
+                margens.append(es[suc] - ef[atual] - lag)
+            elif tipo == "II":
+                margens.append(es[suc] - es[atual] - lag)
+            elif tipo == "TT":
+                margens.append(ef[suc] - ef[atual] - lag)
+            else:  # IT
+                margens.append(ef[suc] - es[atual] - lag)
+        folga_livre = max(0.0, round(min(margens), 6))
         critica = abs(folga_total) < 1e-9
 
         campos_cpm = {
@@ -161,6 +196,8 @@ def calcular_caminho_critico(project_id: str) -> dict[str, Any]:
         salvar_resultado_cpm(atual, campos_cpm)
         resultado_por_atividade[atual] = campos_cpm
 
+    vinculadas = {x for pred, suc in arestas for x in (pred, suc)}
+    atividades_sem_vinculo = [x for x in ids if x not in vinculadas] if len(ids) > 1 else []
     caminho_critico = [a for a in ordem if resultado_por_atividade[a]["critica"]]
     nomes = {a["id"]: a["nome"] for a in atividades}
 
@@ -168,6 +205,9 @@ def calcular_caminho_critico(project_id: str) -> dict[str, Any]:
         "project_id": project_id,
         "duracao_total_dias": round(duracao_total_projeto, 6),
         "total_atividades": len(ids),
+        "atividades_sem_vinculo": atividades_sem_vinculo,
+        "rede_sem_dependencias": len(ids) > 1 and not bool(arestas),
+        "premissa_temporal": "duracoes em dias corridos relativos; calendario nao aplicado",
         "caminho_critico": [
             {"id": a, "nome": nomes[a], **resultado_por_atividade[a]}
             for a in caminho_critico
