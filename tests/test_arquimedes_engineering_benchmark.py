@@ -119,3 +119,38 @@ def test_invalid_duration_never_persists(monkeypatch):
     with pytest.raises(cpm.RedeInvalidaError, match="finitas"):
         cpm.calcular_caminho_critico("FICTICIO-CPM")
     assert saved == []
+
+
+@pytest.mark.parametrize("triplet", [
+    (5, 2, 8),          # likely below optimistic
+    (1, 10, 4),         # pessimistic below likely
+    (-1, 1, 3),         # negative optimistic
+    (1, float("nan"), 3),
+    (1, 2, float("inf")),
+    (0, 0, 0),          # zero duration, not a declared milestone
+])
+def test_pert_rejects_incoherent_estimates(triplet):
+    from models.atividades import duracao_esperada_pert
+    with pytest.raises(ValueError):
+        duracao_esperada_pert(*triplet)
+
+
+def test_pert_known_weighted_reference():
+    from models.atividades import duracao_esperada_pert, desvio_padrao_pert
+    assert duracao_esperada_pert(2, 4, 12) == 5.0
+    assert desvio_padrao_pert(2, 12) == pytest.approx(10/6, abs=1e-4)
+
+
+@pytest.mark.parametrize("duration", [0, -1, float("inf"), float("nan")])
+def test_unfit_activity_duration_cannot_be_persisted(db, duration):
+    with pytest.raises(ValueError, match="duracao_dias"):
+        db.criar_atividade({"eap_ref": "1.1", "nome": "Ficticia",
+                            "duracao_dias": duration})
+    assert db.contar_atividades() == 0
+
+
+def test_invalid_activity_progress_cannot_be_persisted(db):
+    with pytest.raises(ValueError, match="percentual_concluido"):
+        db.criar_atividade({"eap_ref": "1.1", "nome": "Ficticia",
+                            "duracao_dias": 2, "percentual_concluido": 150})
+    assert db.contar_atividades() == 0
