@@ -13,8 +13,8 @@ import os
 import sys
 from typing import Annotated, Any, Callable
 
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.server import TransportSecuritySettings
+from mcp.server.mcpserver import MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import Field
 from starlette.responses import JSONResponse
 from starlette.routing import Route
@@ -22,10 +22,8 @@ from starlette.routing import Route
 import models
 import schemas
 
-mcp = FastMCP(
+mcp = MCPServer(
     name="cronograma-server",
-    stateless_http=(os.environ.get("VERCEL") == "1"),
-    json_response=(os.environ.get("VERCEL") == "1"),
     instructions=(
         "Servidor MCP de cronograma (PERT/CPM), seguindo o roteiro de "
         "Aldo Dorea Mattos: atividades, duracoes, precedencia, caminho "
@@ -36,18 +34,7 @@ mcp = FastMCP(
         "folgas, salvar_baseline/comparar_baseline para acompanhar desvio "
         "de prazo, e curva_s para progresso acumulado planejado x realizado."
     ),
-    transport_security=TransportSecuritySettings(
-        # Mantém a proteção contra DNS rebinding LIGADA (padrão recomendado
-        # para produção) e só autoriza os hosts específicos deste serviço —
-        # diferente do mcp-eap-server, que desativa a proteção inteira
-        # (enable_dns_rebinding_protection=False). Essa é a correção mais
-        # segura das duas: nenhum outro Host consegue rotear pra esse
-        # servidor, mesmo sem autenticação implementada ainda.
-        allowed_hosts=[
-            "mcp-cronograma-server.onrender.com", "*.vercel.app",
-            "localhost:*", "127.0.0.1:*",
-        ],
-    ),
+
 )
 
 
@@ -297,7 +284,22 @@ def curva_s(project_id: Annotated[str | None, Field(description="Projeto (obra).
 
 models.init_db()
 
-app = mcp.streamable_http_app()
+app = mcp.streamable_http_app(
+    stateless_http=(os.environ.get("VERCEL") == "1"),
+    json_response=(os.environ.get("VERCEL") == "1"),
+    transport_security=TransportSecuritySettings(
+        # Mantém a proteção contra DNS rebinding LIGADA (padrão recomendado
+        # para produção) e só autoriza os hosts específicos deste serviço —
+        # diferente do mcp-eap-server, que desativa a proteção inteira
+        # (enable_dns_rebinding_protection=False). Essa é a correção mais
+        # segura das duas: nenhum outro Host consegue rotear pra esse
+        # servidor, mesmo sem autenticação implementada ainda.
+        allowed_hosts=[
+            "mcp-cronograma-server.onrender.com", "*.vercel.app",
+            "localhost:*", "127.0.0.1:*",
+        ],
+    ),
+)
 
 
 async def healthz(_request: Any) -> JSONResponse:
