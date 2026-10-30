@@ -8,6 +8,7 @@ espera extra; negativo = antecipação/sobreposição).
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from .atividades import buscar_atividade
@@ -28,6 +29,12 @@ def criar_dependencia(
         raise ValueError(
             f"tipo '{tipo}' inválido. Válidos: {', '.join(sorted(TIPOS_DEPENDENCIA_VALIDOS))}"
         )
+    try:
+        lag_dias = float(lag_dias)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("lag_dias deve ser numerico e finito.") from exc
+    if not math.isfinite(lag_dias) or abs(lag_dias) > 1e6:
+        raise ValueError("lag_dias deve ser finito e limitado a 1e6 dias.")
     pred = buscar_atividade(predecessora_id)
     suc = buscar_atividade(sucessora_id)
     if pred is None:
