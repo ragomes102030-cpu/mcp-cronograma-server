@@ -42,7 +42,13 @@ def validar_eap_ref(project_id: str, eap_ref: str) -> dict[str, Any]:
         )
     url = f"{base}/internal/eap-node?{urlencode({'project_id': project_id, 'eap_ref': eap_ref})}"
     try:
-        req = Request(url, headers={"Accept": "application/json"}, method="GET")
+        headers = {"Accept": "application/json"}
+        token = (os.environ.get("EAP_API_TOKEN") or "").strip()
+        if os.environ.get("VERCEL") == "1" and not token:
+            raise ValueError("EAP_API_TOKEN não configurado para consulta privada da EAP.")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        req = Request(url, headers=headers, method="GET")
         with urlopen(req, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except Exception as exc:
