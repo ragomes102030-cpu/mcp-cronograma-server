@@ -65,7 +65,7 @@ def independent_reference(durations, edges):
     ({"A": 2, "B": 2, "C": 2},
      [("A", "B", "TI", 0), ("A", "C", "TI", 0)]),
 ])
-def test_cpm_against_independent_enumerator(monkeypatch, durations, edges):
+def test_cpm_against_independent_enumerator(monkeypatch, durations, edges, record_property):
     saved = []
     monkeypatch.setattr(cpm, "listar_atividades", lambda project_id: [
         {"id": n, "nome": n, "duracao_dias": d} for n, d in durations.items()
@@ -90,6 +90,17 @@ def test_cpm_against_independent_enumerator(monkeypatch, durations, edges):
         assert got["folga_livre"] == pytest.approx(free[ident], abs=1e-6)
         assert got["critica"] == (late[ident] == early[ident])
     assert len(saved) == len(durations)
+    observed = {n: {"ES":by_id[n]["es"],"LS":by_id[n]["ls"],
+                    "folga_livre":by_id[n]["folga_livre"]} for n in durations}
+    expected = {n: {"ES":early[n],"LS":late[n],"folga_livre":free[n]}
+                for n in durations}
+    maximum = max(abs(observed[n][k] - expected[n][k])
+                  for n in durations for k in ("ES","LS","folga_livre"))
+    import json
+    record_property("expected", json.dumps(expected,sort_keys=True))
+    record_property("obtained", json.dumps(observed,sort_keys=True))
+    record_property("difference", str(maximum))
+    record_property("tolerance", "1e-6")
 
 
 def test_invalid_orphan_edge_never_persists(monkeypatch):
