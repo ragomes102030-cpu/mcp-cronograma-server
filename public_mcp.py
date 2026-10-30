@@ -102,12 +102,49 @@ def calcular_cpm_com_evidencia(atividades: list[dict], dependencias: list[dict])
             "EF":round(ef[x],6),"LS":round(ls[x],6),"LF":round(ls[x]+dur[x],6),
             "folga_total":round(folga,6),"folga_livre":round(folga_livre,6),
             "critica":abs(folga)<1e-6})
+    # Preserve the legacy list of critical activities, but also return
+    # actual ordered paths with tight precedence links. The project may
+    # have multiple paths; cap enumeration to avoid exponential output.
+    critical = {x for x in dur if abs(ls[x] - es[x]) < 1e-6}
+    tight_adj = {x: [] for x in critical}
+    tight_in = {x: 0 for x in critical}
+    for pred, succ, weight in edges:
+        if (pred in critical and succ in critical and
+                abs(es[succ] - es[pred] - weight) < 1e-6 and
+                succ not in tight_adj[pred]):
+            tight_adj[pred].append(succ)
+            tight_in[succ] += 1
+    roots = [x for x in ordem if x in critical and
+             not tight_in[x] and abs(es[x]) < 1e-6]
+    caminhos_criticos = []
+    limite_caminhos = 128
+    caminhos_truncados = False
+
+    def percorrer(atual: str, caminho: list[str]) -> None:
+        nonlocal caminhos_truncados
+        if caminhos_truncados:
+            return
+        proximos = tight_adj[atual]
+        if not proximos:
+            if abs(ef[atual] - prazo) < 1e-6:
+                if len(caminhos_criticos) >= limite_caminhos:
+                    caminhos_truncados = True
+                else:
+                    caminhos_criticos.append(caminho)
+            return
+        for proximo in proximos:
+            percorrer(proximo, caminho + [proximo])
+
+    for raiz in roots:
+        percorrer(raiz, [raiz])
     vinculadas = {ident for p,s,_ in edges for ident in (p,s)}
     sem_vinculo = [ident for ident in dur if ident not in vinculadas] if len(dur) > 1 else []
     return {"valid":True,"duracao_projeto_dias":round(prazo,6),
             "atividades_sem_vinculo":sem_vinculo,
             "atividades":resultados,
             "caminho_critico":[r["id"] for r in resultados if r["critica"]],
+            "caminhos_criticos":caminhos_criticos,
+            "caminhos_criticos_truncados":caminhos_truncados,
             "origem":"dados_da_chamada","persistido":False,
             "premissa":"tempos relativos; calendario de trabalho nao aplicado"}
 
