@@ -1,18 +1,14 @@
 """MCP publico: calculos em memoria, sem ler ou alterar bancos de obras."""
 from __future__ import annotations
 import math
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.server import TransportSecuritySettings
+from mcp.server.mcpserver import MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 
-public_mcp = FastMCP(
+public_mcp = MCPServer(
     name="arquimedes-cronograma-publico",
     instructions=("Calculos anonimos em memoria e sem persistencia de obras. "
                   "Nenhuma atividade, dependencia, baseline ou projeto e alterado."),
-    stateless_http=True, json_response=True,
-    transport_security=TransportSecuritySettings(
-        enable_dns_rebinding_protection=True,
-        allowed_hosts=["arquimedes-mcp-cronograma.vercel.app", "*.vercel.app", "localhost:*", "127.0.0.1:*"],
-    ),
+
 )
 
 @public_mcp.tool()
@@ -103,4 +99,11 @@ def calcular_cpm_com_evidencia(atividades: list[dict], dependencias: list[dict])
             "origem":"dados_da_chamada","persistido":False,
             "premissa":"tempos relativos; calendario de trabalho nao aplicado"}
 
-public_app=public_mcp.streamable_http_app()
+public_app = public_mcp.streamable_http_app(
+    stateless_http=True,
+    json_response=True,
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=["arquimedes-mcp-cronograma.vercel.app", "*.vercel.app", "localhost:*", "127.0.0.1:*"],
+    ),
+)
