@@ -148,6 +148,37 @@ def calcular_cpm_com_evidencia(atividades: list[dict], dependencias: list[dict])
             "origem":"dados_da_chamada","persistido":False,
             "premissa":"tempos relativos; calendario de trabalho nao aplicado"}
 
+@public_mcp.tool()
+def calcular_cpm_com_calendario(
+    atividades: list[dict], dependencias: list[dict], data_inicio: str,
+    calendario: dict,
+) -> dict:
+    """Calcula CPM deterministico com calendario explicito e fim exclusivo.
+
+    Preserva a ferramenta original. Modo uteis exige duracao e lag em
+    dias inteiros, dias_semana (0=seg) e feriados ISO; nao consulta DB.
+    """
+    from models.cpm_calendario import aplicar_calendario_cpm
+
+    # Fail-closed: do not infer fractional working days by rounding.
+    if not isinstance(calendario, dict):
+        raise ValueError("Calendario precisa ser explicito.")
+    if calendario.get("modo") == "uteis":
+        from models.cpm_calendario import _integer
+        if not isinstance(atividades, list) or not isinstance(dependencias, list):
+            raise ValueError("Atividades e dependencias precisam ser listas.")
+        for a in atividades:
+            if not isinstance(a, dict):
+                raise ValueError("Atividade invalida.")
+            _integer(a.get("duracao_dias"), "duracao_dias", positive=True)
+        for dep in dependencias:
+            if not isinstance(dep, dict):
+                raise ValueError("Dependencia invalida.")
+            _integer(dep.get("lag_dias", 0) or 0, "lag_dias")
+    resultado = calcular_cpm_com_evidencia(atividades, dependencias)
+    return aplicar_calendario_cpm(resultado, atividades, dependencias, data_inicio, calendario)
+
+
 public_app = public_mcp.streamable_http_app(
     stateless_http=True,
     json_response=True,
