@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 import json
+import math
 import os
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -68,13 +69,21 @@ def duracao_esperada_pert(
     """Duração esperada PERT: (O + 4M + P) / 6. None se faltar algum valor."""
     if otimista is None or provavel is None or pessimista is None:
         return None
-    return round((otimista + 4 * provavel + pessimista) / 6, 4)
+    tempos = (float(otimista), float(provavel), float(pessimista))
+    if not all(math.isfinite(x) for x in tempos) or not (0 <= tempos[0] <= tempos[1] <= tempos[2]):
+        raise ValueError("PERT exige 0 <= otimista <= provavel <= pessimista, todos finitos.")
+    valor = (tempos[0] + 4 * tempos[1] + tempos[2]) / 6
+    if valor <= 0:
+        raise ValueError("Duracao PERT resultante deve ser positiva.")
+    return round(valor, 4)
 
 
 def desvio_padrao_pert(otimista: float | None, pessimista: float | None) -> float | None:
     """Desvio padrão PERT: (P - O) / 6."""
     if otimista is None or pessimista is None:
         return None
+    if not all(math.isfinite(float(x)) for x in (otimista, pessimista)) or float(pessimista) < float(otimista):
+        raise ValueError("Desvio padrao PERT requer tempos finitos com pessimista >= otimista.")
     return round((pessimista - otimista) / 6, 4)
 
 
@@ -104,8 +113,15 @@ def criar_atividade(dados: dict[str, Any]) -> dict[str, Any]:
             "Atividade sem duração: informe duracao_dias ou complete o PERT "
             "(duracao_otimista + duracao_provavel + duracao_pessimista)."
         )
-    if duracao < 0:
-        raise ValueError("duracao_dias não pode ser negativa.")
+    try:
+        duracao = float(duracao)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("duracao_dias deve ser numerica, positiva e finita.") from exc
+    if not math.isfinite(duracao) or duracao <= 0:
+        raise ValueError("duracao_dias deve ser positiva e finita.")
+    percentual = dados.get("percentual_concluido", 0)
+    if percentual is None or not isinstance(percentual, (int, float)) or not math.isfinite(float(percentual)) or not 0 <= percentual <= 100:
+        raise ValueError("percentual_concluido deve estar entre 0 e 100, finito.")
 
     aid = _gerar_id("atv")
     with _connect() as conn:
@@ -179,8 +195,12 @@ def atualizar_atividade(atividade_id: str, dados: dict[str, Any]) -> dict[str, A
         if campo in dados:
             if campo == "percentual_concluido":
                 pc = dados[campo]
-                if pc is not None and not (0 <= pc <= 100):
-                    raise ValueError("percentual_concluido deve estar entre 0 e 100.")
+                if pc is None or not isinstance(pc, (int, float)) or not math.isfinite(float(pc)) or not (0 <= pc <= 100):
+                    raise ValueError("percentual_concluido deve estar entre 0 e 100, finito.")
+            if campo == "duracao_dias":
+                d = dados[campo]
+                if d is None or not isinstance(d, (int, float)) or not math.isfinite(float(d)) or d <= 0:
+                    raise ValueError("duracao_dias deve ser positiva e finita.")
             campos.append(f"{campo} = ?")
             valores.append(dados[campo])
     if not campos:
