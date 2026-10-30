@@ -15,6 +15,7 @@ from typing import Annotated, Any, Callable
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
+from mcp_http_security import allowed_mcp_hosts
 from pydantic import Field
 from starlette.responses import JSONResponse
 from starlette.routing import Route
@@ -294,10 +295,7 @@ app = mcp.streamable_http_app(
         # (enable_dns_rebinding_protection=False). Essa é a correção mais
         # segura das duas: nenhum outro Host consegue rotear pra esse
         # servidor, mesmo sem autenticação implementada ainda.
-        allowed_hosts=[
-            "mcp-cronograma-server.onrender.com", "*.vercel.app",
-            "localhost:*", "127.0.0.1:*",
-        ],
+        allowed_hosts=allowed_mcp_hosts("arquimedes-mcp-cronograma.vercel.app", "mcp-cronograma-server.onrender.com"),
     ),
 )
 
