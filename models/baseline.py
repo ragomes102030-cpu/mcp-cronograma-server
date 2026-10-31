@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any
 
 from .atividades import listar_atividades
-from .db import DEFAULT_PROJECT_ID, _connect, _gerar_id, _to_dict, _to_list
+from .db import DEFAULT_PROJECT_ID, _connect, _gerar_id, _to_dict, _to_list, _TURSO_URL
 
 
 def salvar_baseline(project_id: str, nome: str) -> dict[str, Any]:
@@ -25,6 +25,8 @@ def salvar_baseline(project_id: str, nome: str) -> dict[str, Any]:
             + ("..." if len(sem_duracao) > 5 else "") +
             ". Adicione duração ou rode calcular_caminho_critico antes de salvar."
         )
+    if _TURSO_URL:
+        raise RuntimeError("Governanca de baseline requer transacoes; backend Turso ainda nao suportado.")
     bid = _gerar_id("bl")
     with _connect() as conn:
         conn.execute(
@@ -42,15 +44,22 @@ def salvar_baseline(project_id: str, nome: str) -> dict[str, Any]:
                 (bid, a["id"], a.get("data_inicio_planejada"),
                  a.get("data_fim_planejada"), a.get("duracao_dias")),
             )
+        conn.execute(
+            "INSERT INTO baseline_ativa (project_id, baseline_id) VALUES (?, ?) "
+            "ON CONFLICT(project_id) DO UPDATE SET baseline_id=excluded.baseline_id, ativada_em=datetime('now')",
+            (project_id, bid),
+        )
         conn.commit()
-    return {"id": bid, "project_id": project_id, "nome": nome, "total_atividades": len(atividades)}
+    return {"id": bid, "project_id": project_id, "nome": nome, "total_atividades": len(atividades), "ativa": True}
 
 
 def listar_baselines(project_id: str | None = None) -> list[dict[str, Any]]:
     pid = project_id or DEFAULT_PROJECT_ID
     with _connect() as conn:
         cursor = conn.execute(
-            "SELECT * FROM baseline WHERE project_id = ? ORDER BY criado_em", (pid,)
+            "SELECT b.*, CASE WHEN a.baseline_id = b.id THEN 1 ELSE 0 END AS ativa "
+            "FROM baseline b LEFT JOIN baseline_ativa a ON a.project_id = b.project_id "
+            "WHERE b.project_id = ? ORDER BY b.criado_em", (pid,)
         )
     return _to_list(cursor.fetchall())
 
