@@ -183,6 +183,13 @@ def calcular_cpm_com_calendario(
     return aplicar_calendario_cpm(resultado, atividades, dependencias, data_inicio, calendario)
 
 
+@public_mcp.tool()
+def comparar_baseline_sem_persistencia(baseline: list[dict], atual: list[dict]) -> dict:
+    """Compara snapshots fornecidos pelo cliente, sem consultar nem alterar obras."""
+    from models.baseline_comparison import comparar_baseline_em_memoria
+    return comparar_baseline_em_memoria(baseline, atual)
+
+
 public_app = public_mcp.streamable_http_app(
     stateless_http=True,
     json_response=True,
