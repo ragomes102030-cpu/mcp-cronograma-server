@@ -74,6 +74,15 @@ CREATE TABLE IF NOT EXISTS baseline (
     criado_em       TEXT DEFAULT (datetime('now'))
 );
 
+
+-- Ponteiro unico por projeto; baselines antigas continuam preservadas.
+CREATE TABLE IF NOT EXISTS baseline_ativa (
+    project_id TEXT PRIMARY KEY,
+    baseline_id TEXT NOT NULL,
+    ativada_em TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (baseline_id) REFERENCES baseline(id)
+);
+
 CREATE TABLE IF NOT EXISTS baseline_atividade (
     baseline_id     TEXT NOT NULL,
     atividade_id    TEXT NOT NULL,
