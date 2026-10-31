@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any
 
 from .atividades import listar_atividades
-from .db import DEFAULT_PROJECT_ID, _connect, _gerar_id, _to_dict, _to_list, _TURSO_URL
+from .db import DEFAULT_PROJECT_ID, _connect, _gerar_id, _to_dict, _to_list, _TURSO_URL, _get_turso_client
 
 
 def salvar_baseline(project_id: str, nome: str) -> dict[str, Any]:
@@ -25,9 +25,26 @@ def salvar_baseline(project_id: str, nome: str) -> dict[str, Any]:
             + ("..." if len(sem_duracao) > 5 else "") +
             ". Adicione duração ou rode calcular_caminho_critico antes de salvar."
         )
-    if _TURSO_URL:
-        raise RuntimeError("Governanca de baseline requer transacoes; backend Turso ainda nao suportado.")
     bid = _gerar_id("bl")
+    if _TURSO_URL:
+        # libsql_client.batch executa todos os comandos em uma transacao.
+        # O wrapper _TursoConn.execute/commit NAO e transacional.
+        statements = [{"sql": "INSERT INTO baseline (id, project_id, nome) VALUES (?, ?, ?)",
+                       "args": [bid, project_id, nome]}]
+        for a in atividades:
+            statements.append({"sql": (
+                "INSERT INTO baseline_atividade "
+                "(baseline_id, atividade_id, data_inicio_planejada, data_fim_planejada, duracao_dias) "
+                "VALUES (?, ?, ?, ?, ?)"),
+                "args": [bid, a["id"], a.get("data_inicio_planejada"),
+                         a.get("data_fim_planejada"), a.get("duracao_dias")]})
+        statements.append({"sql": (
+            "INSERT INTO baseline_ativa (project_id, baseline_id) VALUES (?, ?) "
+            "ON CONFLICT(project_id) DO UPDATE SET baseline_id=excluded.baseline_id, "
+            "ativada_em=datetime('now')"), "args": [project_id, bid]})
+        _get_turso_client().batch(statements)
+        return {"id": bid, "project_id": project_id, "nome": nome,
+                "total_atividades": len(atividades), "ativa": True}
     with _connect() as conn:
         conn.execute(
             "INSERT INTO baseline (id, project_id, nome) VALUES (?, ?, ?)",
