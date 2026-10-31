@@ -21,8 +21,12 @@ def calcular_duracao_com_evidencia(
     """Calcula ceil(quantidade/produtividade); nao presume produtividade nem converte unidades."""
     if not all(math.isfinite(x) and 0 < x <= 1e9 for x in (quantidade, produtividade)):
         raise ValueError("Quantidade e produtividade devem ser positivas, finitas e <= 1e9.")
-    if not unidade.strip() or unidade.strip().lower() != unidade_produtividade.strip().lower():
-        raise ValueError("Unidades nao compativeis.")
+    unidade_base = unidade.strip().lower()
+    unidade_taxa = unidade_produtividade.strip().lower()
+    # Produtividade por dia: aceitar tanto "m²" (legado) quanto "m²/dia".
+    # Nao converter unidades fisicas nem aceitar denominadores desconhecidos.
+    if not unidade_base or not unidade_taxa or unidade_taxa not in (unidade_base, unidade_base + "/dia"):
+        raise ValueError("Unidades nao compativeis: use a unidade da quantidade ou unidade/dia.")
     return {"duracaoDias": math.ceil(quantidade/produtividade), "quantidade": quantidade,
             "produtividade": produtividade, "unidade": unidade,
             "evidenceLevel": "source_supported" if fonte and fonte.strip() else "engineer_informed",
