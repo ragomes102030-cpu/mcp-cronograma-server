@@ -74,6 +74,15 @@ CREATE TABLE IF NOT EXISTS baseline (
     criado_em       TEXT DEFAULT (datetime('now'))
 );
 
+
+-- Ponteiro unico por projeto; baselines antigas continuam preservadas.
+CREATE TABLE IF NOT EXISTS baseline_ativa (
+    project_id TEXT PRIMARY KEY,
+    baseline_id TEXT NOT NULL,
+    ativada_em TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (baseline_id) REFERENCES baseline(id)
+);
+
 CREATE TABLE IF NOT EXISTS baseline_atividade (
     baseline_id     TEXT NOT NULL,
     atividade_id    TEXT NOT NULL,
@@ -205,4 +214,22 @@ def init_db() -> None:
     """Cria as tabelas caso ainda não existam. Idempotente."""
     with _connect() as conn:
         conn.executescript(SCHEMA)
+        # Migração aditiva: preserva todos os snapshots existentes e elege
+        # deterministicamente o mais recente onde ainda nao existe ativo.
+        # A chave primaria project_id impede dois ponteiros ativos.
+        conn.execute(
+            """
+            INSERT INTO baseline_ativa (project_id, baseline_id)
+            SELECT b.project_id, b.id
+            FROM baseline b
+            WHERE b.id = (
+                SELECT b2.id FROM baseline b2
+                WHERE b2.project_id = b.project_id
+                ORDER BY b2.criado_em DESC, b2.rowid DESC LIMIT 1
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM baseline_ativa a WHERE a.project_id = b.project_id
+            )
+            """
+        )
         conn.commit()

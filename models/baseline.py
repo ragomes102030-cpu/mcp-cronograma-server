@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any
 
 from .atividades import listar_atividades
-from .db import DEFAULT_PROJECT_ID, _connect, _gerar_id, _to_dict, _to_list
+from .db import DEFAULT_PROJECT_ID, _connect, _gerar_id, _to_dict, _to_list, _TURSO_URL, _get_turso_client
 
 
 def salvar_baseline(project_id: str, nome: str) -> dict[str, Any]:
@@ -26,6 +26,25 @@ def salvar_baseline(project_id: str, nome: str) -> dict[str, Any]:
             ". Adicione duração ou rode calcular_caminho_critico antes de salvar."
         )
     bid = _gerar_id("bl")
+    if _TURSO_URL:
+        # libsql_client.batch executa todos os comandos em uma transacao.
+        # O wrapper _TursoConn.execute/commit NAO e transacional.
+        statements = [("INSERT INTO baseline (id, project_id, nome) VALUES (?, ?, ?)",
+                       [bid, project_id, nome])]
+        for a in atividades:
+            statements.append((
+                "INSERT INTO baseline_atividade "
+                "(baseline_id, atividade_id, data_inicio_planejada, data_fim_planejada, duracao_dias) "
+                "VALUES (?, ?, ?, ?, ?)",
+                [bid, a["id"], a.get("data_inicio_planejada"),
+                 a.get("data_fim_planejada"), a.get("duracao_dias")]))
+        statements.append((
+            "INSERT INTO baseline_ativa (project_id, baseline_id) VALUES (?, ?) "
+            "ON CONFLICT(project_id) DO UPDATE SET baseline_id=excluded.baseline_id, "
+            "ativada_em=datetime('now')", [project_id, bid]))
+        _get_turso_client().batch(statements)
+        return {"id": bid, "project_id": project_id, "nome": nome,
+                "total_atividades": len(atividades), "ativa": True}
     with _connect() as conn:
         conn.execute(
             "INSERT INTO baseline (id, project_id, nome) VALUES (?, ?, ?)",
@@ -42,15 +61,22 @@ def salvar_baseline(project_id: str, nome: str) -> dict[str, Any]:
                 (bid, a["id"], a.get("data_inicio_planejada"),
                  a.get("data_fim_planejada"), a.get("duracao_dias")),
             )
+        conn.execute(
+            "INSERT INTO baseline_ativa (project_id, baseline_id) VALUES (?, ?) "
+            "ON CONFLICT(project_id) DO UPDATE SET baseline_id=excluded.baseline_id, ativada_em=datetime('now')",
+            (project_id, bid),
+        )
         conn.commit()
-    return {"id": bid, "project_id": project_id, "nome": nome, "total_atividades": len(atividades)}
+    return {"id": bid, "project_id": project_id, "nome": nome, "total_atividades": len(atividades), "ativa": True}
 
 
 def listar_baselines(project_id: str | None = None) -> list[dict[str, Any]]:
     pid = project_id or DEFAULT_PROJECT_ID
     with _connect() as conn:
         cursor = conn.execute(
-            "SELECT * FROM baseline WHERE project_id = ? ORDER BY criado_em", (pid,)
+            "SELECT b.*, CASE WHEN a.baseline_id = b.id THEN 1 ELSE 0 END AS ativa "
+            "FROM baseline b LEFT JOIN baseline_ativa a ON a.project_id = b.project_id "
+            "WHERE b.project_id = ? ORDER BY b.criado_em", (pid,)
         )
     return _to_list(cursor.fetchall())
 
