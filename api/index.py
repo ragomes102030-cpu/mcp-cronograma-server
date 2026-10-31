@@ -24,8 +24,16 @@ _REQUIRED_DB = ("TURSO_URL", "TURSO_TOKEN", "EAP_SERVER_URL", "EAP_API_TOKEN")
 _MISSING = [key for key in ("MCP_API_TOKEN", *_REQUIRED_DB) if not os.environ.get(key)]
 _mcp_app = None
 _internal_lookup = None
+_PRIVATE_STARTUP_ERROR = None
 if not _MISSING:
-    from server import app as _mcp_app
+    try:
+        from server import app as _mcp_app
+    except Exception as exc:
+        # A private database outage must not take down stateless public MCP.
+        # Keep the private API unavailable rather than silently using SQLite.
+        _PRIVATE_STARTUP_ERROR = type(exc).__name__
+        import logging
+        logging.getLogger(__name__).exception("Private MCP startup failed")
 
 
 async def _send_json(send, status, payload, *, challenge=False):
@@ -114,8 +122,8 @@ async def app(scope, receive, send):
         return
     path = scope.get("path", "")
     if path in ("/healthz", "/api/healthz"):
-        configured = not bool(_MISSING)
-        await _send_json(send, 200 if configured else 503, {"ok": configured, "configured": configured})
+        configured = not bool(_MISSING) and _mcp_app is not None
+        await _send_json(send, 200 if configured else 503, {"ok": configured, "configured": configured, "private_startup_error": _PRIVATE_STARTUP_ERROR})
         return
     # Public endpoint has its OWN tools and no access to project storage.
     # Private /mcp and /internal/eap-node still require MCP_API_TOKEN.
@@ -158,8 +166,8 @@ async def app(scope, receive, send):
     if path not in ("/mcp", "/api/index"):
         await _send_json(send, 404, {"ok": False, "error": "Not found"})
         return
-    if _MISSING:
-        await _send_json(send, 503, {"ok": False, "error": "MCP configuration incomplete"})
+    if _MISSING or _mcp_app is None:
+        await _send_json(send, 503, {"ok": False, "error": "Private MCP unavailable", "reason": _PRIVATE_STARTUP_ERROR or "configuration_incomplete"})
         return
     headers = {key.lower(): val for key, val in scope.get("headers", [])}
     expected = ("Bearer " + os.environ["MCP_API_TOKEN"]).encode("utf-8")
