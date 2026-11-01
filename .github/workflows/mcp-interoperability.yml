@@ -1,5 +1,8 @@
 name: MCP public interoperability (cronograma)
 on:
+  push:
+    branches:
+      - master
   pull_request:
     branches:
       - feat/claude-public-readonly-20261029
