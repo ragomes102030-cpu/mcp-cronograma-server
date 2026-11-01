@@ -180,7 +180,11 @@ async def app(scope, receive, send):
         await _send_json(send, 503, {"ok": False, "error": "Private MCP unavailable", "reason": "configuration_incomplete"})
         return
     headers = {key.lower(): val for key, val in scope.get("headers", [])}
-    expected = ("Bearer " + os.environ["MCP_API_TOKEN"]).encode("utf-8")
+    token = os.environ.get("MCP_API_TOKEN", "")
+    if not token:
+        await _send_json(send, 503, {"ok": False, "error": "Private MCP unavailable", "reason": "configuration_incomplete"})
+        return
+    expected = ("Bearer " + token).encode("utf-8")
     if not hmac.compare_digest(headers.get(b"authorization", b""), expected):
         await _send_json(send, 401, {"ok": False, "error": "Authentication required"}, challenge=True)
         return
