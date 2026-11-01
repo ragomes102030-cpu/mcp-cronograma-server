@@ -24,8 +24,26 @@ _REQUIRED_DB = ("TURSO_URL", "TURSO_TOKEN", "EAP_SERVER_URL", "EAP_API_TOKEN")
 _MISSING = [key for key in ("MCP_API_TOKEN", *_REQUIRED_DB) if not os.environ.get(key)]
 _mcp_app = None
 _internal_lookup = None
-if not _MISSING:
-    from server import app as _mcp_app
+_PRIVATE_STARTUP_ERROR = None
+
+
+def _load_private_app():
+    """Import private server only after authenticated private request.
+
+    Public MCP must never wait for remote database startup during module import.
+    """
+    global _mcp_app, _PRIVATE_STARTUP_ERROR
+    if _mcp_app is not None or _MISSING:
+        return _mcp_app
+    try:
+        from server import app as private_app
+        _mcp_app = private_app
+        _PRIVATE_STARTUP_ERROR = None
+    except Exception as exc:
+        _PRIVATE_STARTUP_ERROR = type(exc).__name__
+        import logging
+        logging.getLogger(__name__).exception("Private MCP startup failed")
+    return _mcp_app
 
 
 async def _send_json(send, status, payload, *, challenge=False):
@@ -114,8 +132,8 @@ async def app(scope, receive, send):
         return
     path = scope.get("path", "")
     if path in ("/healthz", "/api/healthz"):
-        configured = not bool(_MISSING)
-        await _send_json(send, 200 if configured else 503, {"ok": configured, "configured": configured})
+        configured = not bool(_MISSING) and _PRIVATE_STARTUP_ERROR is None
+        await _send_json(send, 200 if configured else 503, {"ok": configured, "configured": configured, "private_startup_error": _PRIVATE_STARTUP_ERROR})
         return
     # Public endpoint has its OWN tools and no access to project storage.
     # Private /mcp and /internal/eap-node still require MCP_API_TOKEN.
@@ -159,7 +177,7 @@ async def app(scope, receive, send):
         await _send_json(send, 404, {"ok": False, "error": "Not found"})
         return
     if _MISSING:
-        await _send_json(send, 503, {"ok": False, "error": "MCP configuration incomplete"})
+        await _send_json(send, 503, {"ok": False, "error": "Private MCP unavailable", "reason": "configuration_incomplete"})
         return
     headers = {key.lower(): val for key, val in scope.get("headers", [])}
     expected = ("Bearer " + os.environ["MCP_API_TOKEN"]).encode("utf-8")
@@ -167,6 +185,9 @@ async def app(scope, receive, send):
         await _send_json(send, 401, {"ok": False, "error": "Authentication required"}, challenge=True)
         return
 
+    if _load_private_app() is None:
+        await _send_json(send, 503, {"ok": False, "error": "Private MCP unavailable", "reason": _PRIVATE_STARTUP_ERROR})
+        return
     if await _reject_unsupported_sse_get(scope, send):
         return
     mcp_scope = dict(scope)
