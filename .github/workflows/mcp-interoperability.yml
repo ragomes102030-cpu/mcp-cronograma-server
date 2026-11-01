@@ -16,6 +16,9 @@ jobs:
     timeout-minutes: 8
     env:
       MCP_TARGET: cronograma
+      # PR #14: test the READY preview deployment, not broken production.
+      # This URL is pinned to commit f1536f9; update when preview changes.
+      MCP_BASE_URL: https://arquimedes-mcp-cronograma-483b3zebi-rafael-5864.vercel.app
       MCP_REPORT_PATH: artifacts/mcp-interop-cronograma.json
       # Set to 1 only after modern 2026-07-28 support has been implemented.
       MCP_REQUIRE_MODERN: "0"
