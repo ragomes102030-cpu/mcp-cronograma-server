@@ -131,20 +131,6 @@ async def app(scope, receive, send):
     if scope["type"] != "http":
         return
     path = scope.get("path", "")
-    # Temporary preview-only diagnostic: no SQL input, no database writes,
-    # no credentials or database content returned. Never exposed in production.
-    if path == "/__diagnostics/turso-readonly" and os.environ.get("VERCEL_ENV") == "preview":
-        try:
-            from models.db import _connect
-            with _connect() as conn:
-                row = conn.execute("SELECT 1 AS probe_ok").fetchone()
-            ok = bool(row and row.get("probe_ok") == 1) if isinstance(row, dict) else bool(row and row[0] == 1)
-            await _send_json(send, 200 if ok else 503, {"ok": ok, "read_only": True})
-        except Exception as exc:
-            import logging
-            logging.getLogger(__name__).exception("Turso read-only probe failed")
-            await _send_json(send, 503, {"ok": False, "read_only": True, "error_type": type(exc).__name__})
-        return
     if path in ("/healthz", "/api/healthz"):
         configured = not bool(_MISSING) and _PRIVATE_STARTUP_ERROR is None
         await _send_json(send, 200 if configured else 503, {"ok": configured, "configured": configured, "private_startup_error": _PRIVATE_STARTUP_ERROR})
