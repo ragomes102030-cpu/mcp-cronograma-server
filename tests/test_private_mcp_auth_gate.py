@@ -28,6 +28,15 @@ def test_private_auth_gate_never_initializes_database(monkeypatch):
     importlib.reload(adapter)
 
 
+def test_missing_private_token_returns_service_unavailable(monkeypatch):
+    monkeypatch.delenv("MCP_API_TOKEN", raising=False)
+    import api.index as adapter
+    with TestClient(adapter.app, base_url="https://arquimedes-mcp-cronograma.vercel.app") as client:
+        response = client.post("/mcp", json={})
+        assert response.status_code == 503
+        assert response.json()["reason"] == "configuration_incomplete"
+
+
 def test_authenticated_private_route_invokes_loader_without_network(monkeypatch):
     monkeypatch.setenv("MCP_API_TOKEN", "isolated-test-token")
     monkeypatch.setenv("TURSO_URL", "https://unreachable.invalid")
