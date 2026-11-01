@@ -3,8 +3,6 @@
 No real credentials, network access, database writes, or production data.
 """
 import importlib
-import os
-import sys
 from unittest.mock import patch
 
 from starlette.testclient import TestClient
