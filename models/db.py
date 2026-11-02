@@ -164,10 +164,31 @@ class _TursoConn:
         return _TursoCursor(result)
 
     def executescript(self, script: str) -> None:
-        for stmt in script.split(";"):
-            stmt = stmt.strip()
-            if stmt:
-                self.execute(stmt)
+        """Execute one complete SQLite statement at a time.
+
+        A plain split(';') breaks on semicolons inside -- comments, strings
+        and triggers; in particular the baseline_ativa schema comment contains
+        a semicolon, making the next CREATE TABLE invalid in Turso.
+        """
+        chunks: list[str] = []
+        for char in script:
+            chunks.append(char)
+            if char == ";":
+                candidate = "".join(chunks)
+                if sqlite3.complete_statement(candidate):
+                    if candidate.strip():
+                        self.execute(candidate)
+                    chunks.clear()
+        remainder = "".join(chunks).strip()
+        if remainder:
+            # sqlite3.executescript accepts a final statement without ';'.
+            # A comment-only suffix must not become an HTTP SQL request.
+            code_lines = [
+                line for line in remainder.splitlines()
+                if line.strip() and not line.lstrip().startswith("--")
+            ]
+            if code_lines:
+                self.execute(remainder)
 
     def commit(self) -> None:
         pass
