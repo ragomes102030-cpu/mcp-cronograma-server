@@ -10,7 +10,6 @@ import hmac
 import json
 import logging
 import os
-from contextlib import AsyncExitStack
 
 from public_mcp import public_app as _public_app
 from mcp_public_origins import allowed_public_origins
@@ -29,9 +28,11 @@ _internal_lookup = None
 _PRIVATE_STARTUP_ERROR = None
 # Only start private MCP after a valid bearer-token request. Public lifespan
 # startup must never connect to Turso or import the private server.
-_private_lifespan_stack = None
 _private_lifespan_lock = None
-_private_lifespan_started_app = None
+_private_transport_task = None
+_private_transport_started_app = None
+_private_transport_stop = None
+_private_transport_ready = None
 
 
 def _load_private_app():
@@ -73,50 +74,73 @@ async def _empty_lifespan(receive, send):
 
 
 async def _lifespan_both(receive, send):
-    """Start public MCP without importing or contacting the private database."""
-    global _private_lifespan_stack, _private_lifespan_lock, _private_lifespan_started_app
+    """Start the public MCP only; never touch Turso on public startup."""
+    global _private_lifespan_lock, _private_transport_task
+    global _private_transport_started_app, _private_transport_stop, _private_transport_ready
     event = await receive()
     if event["type"] != "lifespan.startup":
         return
     try:
-        async with AsyncExitStack() as stack:
-            await stack.enter_async_context(_public_app.router.lifespan_context(_public_app))
-            _private_lifespan_stack = stack
+        async with _public_app.router.lifespan_context(_public_app):
             _private_lifespan_lock = asyncio.Lock()
-            _private_lifespan_started_app = None
+            _private_transport_task = None
+            _private_transport_started_app = None
+            _private_transport_stop = asyncio.Event()
+            _private_transport_ready = None
             try:
                 await send({"type": "lifespan.startup.complete"})
                 while True:
                     event = await receive()
                     if event["type"] == "lifespan.shutdown":
-                        await send({"type": "lifespan.shutdown.complete"})
-                        return
+                        break
             finally:
-                _private_lifespan_stack = None
+                # The private transport owns its lifespan in a dedicated task.
+                # Signal it to shut down, then await it before closing public MCP.
+                if _private_transport_task is not None:
+                    _private_transport_stop.set()
+                    await _private_transport_task
                 _private_lifespan_lock = None
-                _private_lifespan_started_app = None
+                _private_transport_task = None
+                _private_transport_started_app = None
+                _private_transport_stop = None
+                _private_transport_ready = None
+            await send({"type": "lifespan.shutdown.complete"})
     except Exception as exc:
         await send({"type": "lifespan.startup.failed", "message": str(exc)})
 
 
-async def _ensure_private_transport(private_app):
-    """Initialize the private transport once, only for an authenticated request.
+async def _run_private_transport(private_app, ready, stop):
+    """Enter and exit the private AnyIO task group in the SAME async task."""
+    try:
+        async with private_app.router.lifespan_context(private_app):
+            if not ready.done():
+                ready.set_result(True)
+            await stop.wait()
+    except Exception as exc:
+        if not ready.done():
+            ready.set_exception(exc)
+        else:
+            logging.getLogger(__name__).exception("Private transport exited unexpectedly")
 
-    Its lifespan is registered with the running parent ASGI lifespan, so the
-    transport task group survives the request and shuts down with the app.
-    """
-    global _private_lifespan_started_app
-    stack, lock = _private_lifespan_stack, _private_lifespan_lock
-    if stack is None or lock is None:
+
+async def _ensure_private_transport(private_app):
+    """Initialize private MCP only after a valid bearer token is checked."""
+    global _private_transport_task, _private_transport_started_app, _private_transport_ready
+    lock, stop = _private_lifespan_lock, _private_transport_stop
+    if lock is None or stop is None:
         return False
     async with lock:
-        if _private_lifespan_started_app is private_app:
-            return True
-        if _private_lifespan_started_app is not None:
+        if _private_transport_started_app is private_app:
+            return _private_transport_task is not None and not _private_transport_task.done()
+        if _private_transport_started_app is not None:
             return False
-        await stack.enter_async_context(private_app.router.lifespan_context(private_app))
-        _private_lifespan_started_app = private_app
-        return True
+        ready = asyncio.get_running_loop().create_future()
+        _private_transport_started_app = private_app
+        _private_transport_ready = ready
+        _private_transport_task = asyncio.create_task(
+            _run_private_transport(private_app, ready, stop)
+        )
+        return await ready
 
 
 async def _reject_unsupported_sse_get(scope, send):
