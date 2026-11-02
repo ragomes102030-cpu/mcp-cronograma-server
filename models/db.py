@@ -143,10 +143,19 @@ def _get_turso_client() -> Any:
     """ClientSync único (evita vazar uma sessão aiohttp a cada _connect())."""
     global _turso_client
     if _turso_client is None:
-        import libsql_client
-        _turso_client = libsql_client.create_client_sync(
-            url=_normalizar_turso_url(_TURSO_URL), auth_token=_TURSO_TOKEN
-        )
+        driver = os.environ.get("TURSO_DRIVER", "legacy").strip().lower()
+        if driver == "libsql":
+            from .modern_turso import ModernTursoClient
+            _turso_client = ModernTursoClient(
+                url=_normalizar_turso_url(_TURSO_URL), auth_token=_TURSO_TOKEN
+            )
+        elif driver == "legacy":
+            import libsql_client
+            _turso_client = libsql_client.create_client_sync(
+                url=_normalizar_turso_url(_TURSO_URL), auth_token=_TURSO_TOKEN
+            )
+        else:
+            raise ValueError("TURSO_DRIVER must be 'legacy' or 'libsql'.")
     return _turso_client
 
 
