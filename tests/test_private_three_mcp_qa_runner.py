@@ -3,7 +3,6 @@
 These tests use in-memory fakes. They do NOT substitute for live authenticated QA.
 """
 import base64
-from pathlib import Path
 import pytest
 
 from scripts import qa_three_private_mcps as qa
