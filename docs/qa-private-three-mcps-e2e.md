@@ -41,10 +41,14 @@ três secrets do Actions: `QA_EAP_MCP_TOKEN`,
 `QA_CRONOGRAMA_MCP_TOKEN` e `QA_LOB_MCP_TOKEN`. Esses valores precisam
 ser os **MCP_API_TOKEN dos projetos QA**, não tokens do banco Turso.
 
-O Cronograma QA também precisa configurar `EAP_SERVER_URL` apontando para
-o endpoint de consulta privada do **EAP QA**, e `EAP_API_TOKEN` correspondendo
-ao token daquele projeto QA. Os bancos EAP e Cronograma devem ser descartáveis
-e diferentes dos bancos de produção.
+O Cronograma QA também precisa configurar `EAP_SERVER_URL` com a
+**origem HTTPS sem `/mcp`** do EAP QA, por exemplo
+`https://arquimedes-eap-private-qa-20261102-EXEMPLO.vercel.app`. Seu
+`models/atividades.py` acrescenta automaticamente
+`/internal/eap-node?project_id=...&eap_ref=...`; acrescentar `/mcp` na
+variável causaria HTTP 404. `EAP_API_TOKEN` deve ser exatamente o
+`MCP_API_TOKEN` do mesmo EAP QA. Os bancos EAP e Cronograma precisam ser
+descartáveis e diferentes dos bancos de produção.
 
 Acionar manualmente o workflow `three-private-mcp-disposable-qa.yml` com
 `confirm=YES_QA_ONLY` e URLs dos três deployments QA, todas terminando em
