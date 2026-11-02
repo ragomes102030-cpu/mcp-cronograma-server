@@ -29,7 +29,9 @@ def test_authenticated_private_request_with_real_local_server(tmp_path, monkeypa
 
     # An authenticated but malformed MCP request must reach the real MCP app,
     # not be rejected by the auth gate or trigger a production DB connection.
-    # Start the MCP ASGI lifespan so the transport task group is initialized.\n    with client:\n        response = client.post("/mcp", headers={
+    # Start the MCP ASGI lifespan so the transport task group is initialized.
+    with client:
+        response = client.post("/mcp", headers={
         "Authorization": "Bearer test-only-secret",
         "Accept": "application/json, text/event-stream",
         "Content-Type": "application/json",
