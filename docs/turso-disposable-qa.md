@@ -53,3 +53,23 @@ processo de teste: a aplicação publicada continua fail-closed.
 
 **Nunca** execute o comando de homologação remota apontando para o banco de
 produção. Exclua o banco descartável pelo painel Turso após a aprovação.
+
+## 5. GitHub Actions (execução manual)
+
+O workflow `Turso disposable QA (manual, protected)` só executa após seleção
+manual da ação e digitação exata de `YES_DISPOSABLE_WRITES`.
+
+Cadastre no GitHub do repositório, sem expor os valores em logs:
+
+- Repository secret `QA_TURSO_DATABASE_URL`: URL do novo banco QA vazio.
+- Repository secret `QA_TURSO_AUTH_TOKEN`: token exclusivo desse banco QA.
+- Repository variable `TURSO_PRODUCTION_DATABASE_URL`: URL (sem token)
+  do banco em produção para confronto de hostnames.
+
+Em **Actions → Turso disposable QA (manual, protected) → Run workflow**,
+confirme o banco QA e execute. A matriz testa o driver legado e o novo
+`libsql` sequencialmente. O próprio teste aborta se o hostname QA for igual
+ao de produção ou se não tiver prefixo de banco descartável.
+
+Após a homologação, elimine ou revogue o token QA e destrua o banco de teste.
+Não altere `TURSO_DRIVER` em produção sem as duas variantes aprovadas.
