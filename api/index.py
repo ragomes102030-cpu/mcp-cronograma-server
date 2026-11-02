@@ -215,10 +215,12 @@ async def app(scope, receive, send):
                     "AND name IN ('atividade','dependencia','baseline',"
                     "'baseline_ativa','baseline_atividade','idempotency')")
                 present = {str(row[0]) for row in tables.rows}
+                baseline_count = client.execute("SELECT COUNT(*) FROM baseline").rows[0][0]
                 return {"ok": True, "ping": ping.rows[0][0] == 1,
                         "expected_tables_count": len(present),
                         "expected_tables_total": len(expected),
                         "missing_tables": sorted(expected - present),
+                        "baseline_rows": int(baseline_count),
                         "read_only": True}
             finally:
                 client.close()
