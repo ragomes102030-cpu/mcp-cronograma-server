@@ -190,30 +190,6 @@ async def app(scope, receive, send):
     if scope["type"] != "http":
         return
     path = scope.get("path", "")
-    # NEVER MERGE: read-only SDK compatibility probe, restricted to preview branch.
-    if (path == "/_diagnostic/libsql-ping"
-            and scope.get("method") == "GET"
-            and os.environ.get("VERCEL_ENV") == "preview"
-            and os.environ.get("VERCEL_GIT_COMMIT_REF") == "diagnostic/libsql-readonly-20261102"):
-        def _read_only_probe():
-            from models.db import _normalizar_turso_url
-            from models.modern_turso import ModernTursoClient
-            url = os.environ.get("TURSO_URL") or os.environ.get("TURSO_DATABASE_URL", "")
-            token = os.environ.get("TURSO_TOKEN") or os.environ.get("TURSO_AUTH_TOKEN", "")
-            if not url or not token:
-                return {"ok": False, "category": "config_missing"}
-            client = ModernTursoClient(_normalizar_turso_url(url), token)
-            ping = client.execute("SELECT 1 AS ping")
-            schema = client.execute("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table'")
-            return {"ok": ping.rows[0][0] == 1,
-                    "sdk": "libsql", "read_only": True,
-                    "schema_visible": bool(schema.rows)}
-        try:
-            result = await asyncio.to_thread(_read_only_probe)
-        except Exception as exc:
-            result = {"ok": False, "error_type": type(exc).__name__, "read_only": True}
-        await _send_json(send, 200 if result.get("ok") else 503, result)
-        return
     if path in ("/healthz", "/api/healthz"):
         configured = not bool(_MISSING) and _PRIVATE_STARTUP_ERROR is None
         await _send_json(send, 200 if configured else 503, {"ok": configured, "configured": configured, "private_startup_error": _PRIVATE_STARTUP_ERROR})
