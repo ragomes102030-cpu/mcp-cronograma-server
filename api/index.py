@@ -73,8 +73,9 @@ async def _lifespan_both(receive, send):
     try:
         async with AsyncExitStack() as stack:
             await stack.enter_async_context(_public_app.router.lifespan_context(_public_app))
-            if _mcp_app is not None:
-                await stack.enter_async_context(_mcp_app.router.lifespan_context(_mcp_app))
+            private_app = _load_private_app() if not _MISSING else None
+            if private_app is not None:
+                await stack.enter_async_context(private_app.router.lifespan_context(private_app))
             await send({"type": "lifespan.startup.complete"})
             while True:
                 event = await receive()
