@@ -203,6 +203,32 @@ def run(config: dict, *, export_dir: Path) -> dict:
     })
     if lob.get("duracao_total_dias") != 14:
         raise AssertionError("LOB privada não corresponde aos 14 dias pós-mobilização")
+    # Compare each repeated activity against private CPM, after mobilization
+    # offsets. This is an independently checked cross-engine contract.
+    by_id = {row["id"]: row for row in calc["atividades"]}
+    lob_units = {
+        (service.get("nome"), unit.get("unidade")): unit
+        for service in lob.get("atividades", [])
+        for unit in service.get("unidades", [])
+    }
+    comparisons = []
+    for key, name, location in [
+        ("est1", "Estrutura", "P01"), ("est2", "Estrutura", "P02"),
+        ("alv1", "Alvenaria", "P01"), ("alv2", "Alvenaria", "P02")
+    ]:
+        cpm_task = by_id[created[key]]
+        lob_task = lob_units.get((name, location))
+        if not lob_task:
+            raise AssertionError(f"LOB sem tarefa {name}/{location}")
+        start_cpm = cpm_task.get("ES", cpm_task.get("es"))
+        finish_cpm = cpm_task.get("EF", cpm_task.get("ef"))
+        if start_cpm is None or finish_cpm is None:
+            raise AssertionError("CPM sem datas cedo")
+        equal = (abs((start_cpm - 2) - lob_task["inicio_dia"]) < 1e-6
+                 and abs((finish_cpm - 2) - lob_task["fim_dia"]) < 1e-6)
+        comparisons.append({"servico": name, "local": location, "coincide": equal})
+        if not equal:
+            raise AssertionError(f"CPM/LOB divergem na tarefa {name}/{location}")
     rows = []
     for a in calc["atividades"]:
         start = date.fromisoformat(DATE_START)+timedelta(days=a["ES"] if "ES" in a else a["es"])
@@ -226,7 +252,7 @@ def run(config: dict, *, export_dir: Path) -> dict:
         "eap_nodes": 4, "activities": 5, "dependencies": 5,
         "cpm_days": 16, "lob_days_after_mobilization": 14,
         "baseline_saved": True, "gantt_bytes": len(exported),
-        "calls": audit,
+        "cpm_lob_comparisons": comparisons, "calls": audit,
     }
     (export_dir / "relatorio_qa_privado.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf8")
