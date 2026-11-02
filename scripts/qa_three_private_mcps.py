@@ -136,7 +136,7 @@ def run(config: dict, *, export_dir: Path) -> dict:
         tools = client.connect()
         must = {"eap": {"criar_projeto", "criar_eap_node", "get_eap_tree", "validar_estrutura"},
                 "cronograma": {"criar_atividade", "criar_dependencia", "listar_atividades",
-                                "calcular_caminho_critico", "salvar_baseline", "listar_baselines"},
+                                "calcular_caminho_critico", "salvar_baseline", "listar_baselines", "comparar_baseline"},
                 "lob": {"calcular_linha_balanco", "gerar_gantt"}}[name]
         if not must.issubset(tools):
             raise RuntimeError(f"{name}: ferramentas privadas faltando: {sorted(must-tools)}")
@@ -172,11 +172,18 @@ def run(config: dict, *, export_dir: Path) -> dict:
         ("alv1", "Alvenaria P01", leaves["alv"], 5, "P01"),
         ("alv2", "Alvenaria P02", leaves["alv"], 5, "P02"),
     ]
+    # Explicit planned dates: baseline must snapshot meaningful start/finish
+    # values, not five null dates. End is exclusive for the QA comparison.
+    expected_offsets = {"pre": (0, 2), "est1": (2, 6), "est2": (6, 10),
+                        "alv1": (6, 11), "alv2": (11, 16)}
     created = {}
     for key, label, ref, duration, _ in activity_specs:
         item = invoke("cronograma", "criar_atividade", {
             "project_id": project_id, "eap_ref": ref, "nome": label,
-            "duracao_dias": duration, "request_id": project_id+"-"+key})
+            "duracao_dias": duration,
+            "data_inicio_planejada": (date.fromisoformat(DATE_START)+timedelta(days=expected_offsets[key][0])).isoformat(),
+            "data_fim_planejada": (date.fromisoformat(DATE_START)+timedelta(days=expected_offsets[key][1])).isoformat(),
+            "request_id": project_id+"-"+key})
         if item.get("project_id") != project_id or item.get("eap_ref") != ref:
             raise AssertionError("Atividade sem vínculo EAP/projeto esperado")
         created[key] = item["id"]
@@ -192,10 +199,21 @@ def run(config: dict, *, export_dir: Path) -> dict:
     calc = invoke("cronograma", "calcular_caminho_critico", {"project_id": project_id})
     if calc.get("total_atividades") != 5 or calc.get("duracao_total_dias") != 16:
         raise AssertionError("CPM privado divergente da rede de referência (16 dias)")
+    for key, _, _, _, _ in activity_specs:
+        row = next(x for x in calc["atividades"] if x["id"] == created[key])
+        actual = (row.get("ES", row.get("es")), row.get("EF", row.get("ef")))
+        if actual != expected_offsets[key]:
+            raise AssertionError(f"CPM privado divergiu dos intervalos: {key} {actual}")
     base = invoke("cronograma", "salvar_baseline", {"project_id": project_id, "nome": "QA Baseline 0"})
     base_list = invoke("cronograma", "listar_baselines", {"project_id": project_id})
-    if base_list.get("total") != 1:
+    if base_list.get("total") != 1 or not base.get("id"):
         raise AssertionError("Baseline não persistiu no banco QA")
+    cmp_baseline = invoke("cronograma", "comparar_baseline", {"baseline_id": base["id"]})
+    compare_rows = cmp_baseline.get("comparacao") or []
+    if len(compare_rows) != 5 or any(
+        x.get("desvio_duracao_dias") not in (0, 0.0) for x in compare_rows
+    ):
+        raise AssertionError("Baseline QA incompleta ou com desvio inesperado")
     lob = invoke("lob", "calcular_linha_balanco", {
         "atividades": [{"nome": "Estrutura", "tempo_unitario": 4, "numero_equipes": 1},
                        {"nome": "Alvenaria", "tempo_unitario": 5, "numero_equipes": 1}],
