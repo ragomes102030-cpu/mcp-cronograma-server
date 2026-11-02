@@ -2,7 +2,6 @@
 
 No Turso token, network connection, or external EAP calls are used.
 """
-import importlib
 import sys
 
 import api.index as adapter
