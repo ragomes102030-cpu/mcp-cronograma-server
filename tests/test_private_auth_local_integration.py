@@ -31,6 +31,8 @@ def test_authenticated_private_request_with_real_local_server(tmp_path, monkeypa
     # not be rejected by the auth gate or trigger a production DB connection.
     # Start the MCP ASGI lifespan so the transport task group is initialized.
     with client:
+        # A public lifespan must not import private MCP or initialize Turso.
+        assert adapter._mcp_app is None
         response = client.post("/mcp", headers={
         "Authorization": "Bearer test-only-secret",
         "Accept": "application/json, text/event-stream",
@@ -40,3 +42,24 @@ def test_authenticated_private_request_with_real_local_server(tmp_path, monkeypa
     assert adapter._mcp_app is not None
     assert adapter._PRIVATE_STARTUP_ERROR is None
     assert not (tmp_path / "isolated-auth.db").exists() or (tmp_path / "isolated-auth.db").is_file()
+
+
+def test_public_lifespan_never_loads_private_server(monkeypatch):
+    """Public startup/health must not touch Turso even when private is configured."""
+    monkeypatch.setattr(adapter, "_MISSING", [])
+    monkeypatch.setattr(adapter, "_mcp_app", None)
+    monkeypatch.setattr(adapter, "_PRIVATE_STARTUP_ERROR", None)
+    monkeypatch.setenv("MCP_API_TOKEN", "test-only-secret")
+
+    def unexpected_private_startup():
+        raise AssertionError("private MCP loaded during public startup")
+
+    monkeypatch.setattr(adapter, "_load_private_app", unexpected_private_startup)
+    with TestClient(adapter.app, base_url="http://testserver") as client:
+        assert adapter._mcp_app is None
+        health = client.get("/healthz")
+        assert health.status_code == 200, health.text
+        public = client.get("/public-mcp", headers={"Accept": "application/json"})
+        assert public.status_code == 200, public.text
+        assert public.json()["transport"] == "streamable-http"
+        assert adapter._mcp_app is None
