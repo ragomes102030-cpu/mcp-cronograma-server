@@ -56,6 +56,7 @@ def test_private_integrated_flow_with_qa_fakes(monkeypatch, tmp_path):
             if name=="criar_projeto":
                 return {"project_id":args["project_id"]}
             if name=="criar_eap_node":
+                assert args["tipo_frente"] in {"infraestrutura", "estrutura", "alvenaria"}
                 counters["eap"]+=1
                 num=counters["eap"]
                 return {"eap_id":["1","1.1","1.1.1","1.1.2"][num-1],"uid":f"qa-uid-{num}"}

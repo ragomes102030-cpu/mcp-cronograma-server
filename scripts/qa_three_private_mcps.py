@@ -144,7 +144,7 @@ def run(config: dict, *, export_dir: Path) -> dict:
     # One unique QA project in the isolated databases. No 'default' identifier.
     invoke("eap", "criar_projeto", {"project_id": project_id, "nome": "QA Integracao Tres MCPs"})
     root = invoke("eap", "criar_eap_node", {
-        "project_id": project_id, "nome": "Obra QA", "tipo_frente": "geral",
+        "project_id": project_id, "nome": "Obra QA", "tipo_frente": "infraestrutura",
         "request_id": project_id + "-root"})
     root_id = root["eap_id"]
     group = invoke("eap", "criar_eap_node", {
@@ -154,7 +154,7 @@ def run(config: dict, *, export_dir: Path) -> dict:
     for key, label, unit, qty in [("est", "Estrutura", "m2", 160), ("alv", "Alvenaria", "m2", 200)]:
         item = invoke("eap", "criar_eap_node", {
             "project_id": project_id, "parent_id": group["eap_id"], "nome": label,
-            "tipo_frente": "estrutura" if key=="est" else "vedacao",
+            "tipo_frente": "estrutura" if key=="est" else "alvenaria",
             "unidade": unit, "quantidade": qty,
             "request_id": project_id+"-"+key})
         leaves[key] = item.get("uid") or item["eap_id"]
