@@ -47,7 +47,7 @@ def test_private_integrated_flow_with_qa_fakes(monkeypatch, tmp_path):
             return {
                 "criar_projeto","criar_eap_node","get_eap_tree","validar_estrutura",
                 "criar_atividade","criar_dependencia","listar_atividades",
-                "calcular_caminho_critico","salvar_baseline","listar_baselines",
+                "calcular_caminho_critico","salvar_baseline","listar_baselines","comparar_baseline",
                 "calcular_linha_balanco","gerar_gantt",
             }
         def call(self, name, args):
@@ -79,6 +79,8 @@ def test_private_integrated_flow_with_qa_fakes(monkeypatch, tmp_path):
                 return {"id":"baseline-qa"}
             if name=="listar_baselines":
                 return {"total":1}
+            if name=="comparar_baseline":
+                return {"comparacao":[{"desvio_duracao_dias":0} for _ in range(5)]}
             if name=="calcular_linha_balanco":
                 return {"duracao_total_dias":14,"atividades":[
                     {"nome":"Estrutura","unidades":[
