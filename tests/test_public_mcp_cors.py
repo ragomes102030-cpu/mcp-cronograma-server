@@ -6,7 +6,10 @@ from api.index import app
 
 def test_public_cors_preflight_and_private_isolation():
     base_url = "https://arquimedes-mcp-cronograma.vercel.app"
-    with TestClient(app, base_url=base_url) as client:
+    # These probes never enter the MCP transport; avoid starting its single-use
+    # ASGI session-manager lifespan just for OPTIONS and GET checks.
+    client = TestClient(app, base_url=base_url)
+    try:
         preflight = client.options("/public-mcp", headers={
             "Origin": "https://independent-client.example",
             "Access-Control-Request-Method": "POST",
@@ -45,3 +48,6 @@ def test_public_cors_preflight_and_private_isolation():
 
         health = client.get("/healthz", headers={"Origin": "https://independent-client.example"})
         assert "access-control-allow-origin" not in health.headers
+
+    finally:
+        client.close()
