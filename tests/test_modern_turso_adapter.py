@@ -1,5 +1,4 @@
 """Native libsql contract and opt-in adapter regression without remote secrets."""
-import os
 import sqlite3
 import sys
 from types import SimpleNamespace
