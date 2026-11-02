@@ -1,0 +1,64 @@
+name: QA — Integração privada EAP → Cronograma → Gantt/LOB
+
+# Manual only. Never runs from pull requests, pushes or production deploys.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Escreva exatamente YES_QA_ONLY (grava na base descartável)'
+        required: true
+        type: string
+      eap_qa_url:
+        description: 'Endpoint privado /mcp do deployment EAP QA'
+        required: true
+        type: string
+      cronograma_qa_url:
+        description: 'Endpoint privado /mcp do deployment Cronograma QA'
+        required: true
+        type: string
+      lob_qa_url:
+        description: 'Endpoint privado /mcp do deployment Gantt/LOB QA'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  private-qa:
+    if: ${{ inputs.confirm == 'YES_QA_ONLY' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: arquimedes-private-disposable-qa
+      cancel-in-progress: false
+    env:
+      QA_PRIVATE_E2E_CONFIRM: ${{ inputs.confirm }}
+      QA_EAP_MCP_URL: ${{ inputs.eap_qa_url }}
+      QA_CRONOGRAMA_MCP_URL: ${{ inputs.cronograma_qa_url }}
+      QA_LOB_MCP_URL: ${{ inputs.lob_qa_url }}
+      QA_EAP_MCP_TOKEN: ${{ secrets.QA_EAP_MCP_TOKEN }}
+      QA_CRONOGRAMA_MCP_TOKEN: ${{ secrets.QA_CRONOGRAMA_MCP_TOKEN }}
+      QA_LOB_MCP_TOKEN: ${{ secrets.QA_LOB_MCP_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Confirmar que as credenciais estao configuradas (sem revelar valores)
+        run: |
+          python - <<'PY'
+          from scripts.qa_three_private_mcps import config_from_env
+          assert set(config_from_env()) == {"eap", "cronograma", "lob"}
+          print("Preflight: URLs privadas QA, 3 tokens e confirmacao validados")
+          PY
+      - name: Executar transacao real sobre tres MCPs QA
+        run: python scripts/qa_three_private_mcps.py --execute --output-dir qa-evidencias
+      - name: Arquivar provas sem segredos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arquimedes-tres-mcps-qa
+          path: qa-evidencias/
+          if-no-files-found: warn
+          retention-days: 7
