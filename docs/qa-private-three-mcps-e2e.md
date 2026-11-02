@@ -11,9 +11,11 @@ persistência nos três servidores.
 com ID aleatório `qa-integracao-...`, exclusivamente nos três endereços QA
 pré-definidos. Regras de falha segura:
 
-1. Todas as três URLs precisam usar HTTPS, host `*.vercel.app`, sufixo `/mcp`
-   e os respectivos prefixos `arquimedes-eap-private-qa-20261102-`,
-   `arquimedes-cronograma-qa-runner-` e `arquimedes-lob-private-qa-20261102-`.
+1. Todas as três URLs precisam usar HTTPS, sufixo `/mcp` e **host exato
+   (sem subdomínios parecidos)** dos projetos verificados:
+   `arquimedes-eap-private-qa-20261102.vercel.app`,
+   `arquimedes-cronograma-qa-runner.vercel.app` e
+   `arquimedes-lob-private-qa-20261102.vercel.app`.
 2. Não aceita endpoints públicos, aliases de produção, credenciais na URL,
    parâmetros de URL ou redirecionamentos HTTP.
 3. Exige `--execute`, `QA_PRIVATE_E2E_CONFIRM=YES_QA_ONLY` e **três tokens
@@ -51,8 +53,8 @@ variável causaria HTTP 404. `EAP_API_TOKEN` deve ser exatamente o
 descartáveis e diferentes dos bancos de produção.
 
 Acionar manualmente o workflow `three-private-mcp-disposable-qa.yml` com
-`confirm=YES_QA_ONLY` e URLs dos três deployments QA, todas terminando em
-`/mcp`. Os logs não imprimem tokens. O workflow produz os artefatos
+`confirm=YES_QA_ONLY` e **URLs canônicas fixas** dos projetos QA,
+todas terminando em `/mcp` (não usar URLs de deployments de hash variável). Os logs não imprimem tokens. O workflow produz os artefatos
 `gantt_qa_privado.xlsx` e `relatorio_qa_privado.json`.
 
 **Pré-verificação sem escrever:** `python scripts/qa_three_private_mcps.py`
