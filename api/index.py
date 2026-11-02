@@ -5,10 +5,11 @@ for Render without triggering its SQLite startup side effects on Vercel.
 """
 from __future__ import annotations
 
+import asyncio
 import hmac
 import json
+import logging
 import os
-from contextlib import AsyncExitStack
 
 from public_mcp import public_app as _public_app
 from mcp_public_origins import allowed_public_origins
@@ -25,6 +26,13 @@ _MISSING = [key for key in ("MCP_API_TOKEN", *_REQUIRED_DB) if not os.environ.ge
 _mcp_app = None
 _internal_lookup = None
 _PRIVATE_STARTUP_ERROR = None
+# Only start private MCP after a valid bearer-token request. Public lifespan
+# startup must never connect to Turso or import the private server.
+_private_lifespan_lock = None
+_private_transport_task = None
+_private_transport_started_app = None
+_private_transport_stop = None
+_private_transport_ready = None
 
 
 def _load_private_app():
@@ -66,24 +74,73 @@ async def _empty_lifespan(receive, send):
 
 
 async def _lifespan_both(receive, send):
-    """Start the public and private FastMCP session managers independently."""
+    """Start the public MCP only; never touch Turso on public startup."""
+    global _private_lifespan_lock, _private_transport_task
+    global _private_transport_started_app, _private_transport_stop, _private_transport_ready
     event = await receive()
     if event["type"] != "lifespan.startup":
         return
     try:
-        async with AsyncExitStack() as stack:
-            await stack.enter_async_context(_public_app.router.lifespan_context(_public_app))
-            private_app = _load_private_app() if not _MISSING else None
-            if private_app is not None:
-                await stack.enter_async_context(private_app.router.lifespan_context(private_app))
-            await send({"type": "lifespan.startup.complete"})
-            while True:
-                event = await receive()
-                if event["type"] == "lifespan.shutdown":
-                    await send({"type": "lifespan.shutdown.complete"})
-                    return
+        async with _public_app.router.lifespan_context(_public_app):
+            _private_lifespan_lock = asyncio.Lock()
+            _private_transport_task = None
+            _private_transport_started_app = None
+            _private_transport_stop = asyncio.Event()
+            _private_transport_ready = None
+            try:
+                await send({"type": "lifespan.startup.complete"})
+                while True:
+                    event = await receive()
+                    if event["type"] == "lifespan.shutdown":
+                        break
+            finally:
+                # The private transport owns its lifespan in a dedicated task.
+                # Signal it to shut down, then await it before closing public MCP.
+                if _private_transport_task is not None:
+                    _private_transport_stop.set()
+                    await _private_transport_task
+                _private_lifespan_lock = None
+                _private_transport_task = None
+                _private_transport_started_app = None
+                _private_transport_stop = None
+                _private_transport_ready = None
+            await send({"type": "lifespan.shutdown.complete"})
     except Exception as exc:
         await send({"type": "lifespan.startup.failed", "message": str(exc)})
+
+
+async def _run_private_transport(private_app, ready, stop):
+    """Enter and exit the private AnyIO task group in the SAME async task."""
+    try:
+        async with private_app.router.lifespan_context(private_app):
+            if not ready.done():
+                ready.set_result(True)
+            await stop.wait()
+    except Exception as exc:
+        if not ready.done():
+            ready.set_exception(exc)
+        else:
+            logging.getLogger(__name__).exception("Private transport exited unexpectedly")
+
+
+async def _ensure_private_transport(private_app):
+    """Initialize private MCP only after a valid bearer token is checked."""
+    global _private_transport_task, _private_transport_started_app, _private_transport_ready
+    lock, stop = _private_lifespan_lock, _private_transport_stop
+    if lock is None or stop is None:
+        return False
+    async with lock:
+        if _private_transport_started_app is private_app:
+            return _private_transport_task is not None and not _private_transport_task.done()
+        if _private_transport_started_app is not None:
+            return False
+        ready = asyncio.get_running_loop().create_future()
+        _private_transport_started_app = private_app
+        _private_transport_ready = ready
+        _private_transport_task = asyncio.create_task(
+            _run_private_transport(private_app, ready, stop)
+        )
+        return await ready
 
 
 async def _reject_unsupported_sse_get(scope, send):
@@ -126,6 +183,7 @@ def _public_cors_sender(send, origin):
 
 
 async def app(scope, receive, send):
+    global _PRIVATE_STARTUP_ERROR
     if scope["type"] == "lifespan":
         await _lifespan_both(receive, send)
         return
@@ -190,12 +248,22 @@ async def app(scope, receive, send):
         await _send_json(send, 401, {"ok": False, "error": "Authentication required"}, challenge=True)
         return
 
-    if _load_private_app() is None:
+    private_app = _load_private_app()
+    if private_app is None:
         await _send_json(send, 503, {"ok": False, "error": "Private MCP unavailable", "reason": _PRIVATE_STARTUP_ERROR})
         return
     if await _reject_unsupported_sse_get(scope, send):
         return
+    try:
+        ready = await _ensure_private_transport(private_app)
+    except Exception as exc:
+        _PRIVATE_STARTUP_ERROR = type(exc).__name__
+        logging.getLogger(__name__).exception("Private MCP transport startup failed")
+        ready = False
+    if not ready:
+        await _send_json(send, 503, {"ok": False, "error": "Private MCP unavailable", "reason": "transport_unavailable"})
+        return
     mcp_scope = dict(scope)
     mcp_scope["path"] = "/mcp"
     mcp_scope["raw_path"] = b"/mcp"
-    await _mcp_app(mcp_scope, receive, send)
+    await private_app(mcp_scope, receive, send)
