@@ -9,3 +9,6 @@ starlette==1.6.0
 # Cliente SQLite remoto (Turso/libSQL) — fallback pro sqlite3 local quando
 # TURSO_URL não está configurada (disco do Render não é persistente).
 libsql-client==0.3.1
+
+# Novo SDK oficial: modo opt-in TURSO_DRIVER=libsql, sem mudar a produção.
+libsql==0.1.11
