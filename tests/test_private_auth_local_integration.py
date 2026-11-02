@@ -4,6 +4,7 @@ This exercises the ASGI authentication gate and actual private app loader.
 No Turso credentials or network requests are used.
 """
 import sys
+from contextlib import asynccontextmanager
 
 from starlette.testclient import TestClient
 
@@ -55,6 +56,15 @@ def test_public_lifespan_never_loads_private_server(monkeypatch):
         raise AssertionError("private MCP loaded during public startup")
 
     monkeypatch.setattr(adapter, "_load_private_app", unexpected_private_startup)
+
+    # The real SDK session manager is single-use and was already exercised by
+    # the authenticated test above. Only bypass its *public* lifecycle here;
+    # this regression specifically verifies that private startup is not called.
+    @asynccontextmanager
+    async def isolated_public_lifespan(_app):
+        yield
+
+    monkeypatch.setattr(adapter._public_app.router, "lifespan_context", isolated_public_lifespan)
     with TestClient(adapter.app, base_url="http://testserver") as client:
         assert adapter._mcp_app is None
         health = client.get("/healthz")
