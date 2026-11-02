@@ -190,6 +190,39 @@ async def app(scope, receive, send):
     if scope["type"] != "http":
         return
     path = scope.get("path", "")
+    # Preview-only diagnostic. Never merge this into production.
+    if (path == "/_diagnostic/turso-schema"
+            and os.environ.get("VERCEL_ENV") == "preview"
+            and os.environ.get("VERCEL_GIT_COMMIT_REF") == "diagnostic/turso-schema-readonly-20261102"):
+        def probe_read_only():
+            import libsql_client
+            raw_url = os.environ.get("TURSO_URL") or os.environ.get("TURSO_DATABASE_URL", "")
+            token = os.environ.get("TURSO_TOKEN") or os.environ.get("TURSO_AUTH_TOKEN", "")
+            if not raw_url or not token:
+                return {"ok": False, "error_type": "ConfigMissing"}
+            url = raw_url
+            if url.startswith("libsql://"):
+                url = "https://" + url[len("libsql://"):]
+            elif url.startswith("wss://"):
+                url = "https://" + url[len("wss://"):]
+            client = libsql_client.create_client_sync(url=url, auth_token=token)
+            try:
+                ping = client.execute("SELECT 1 AS ping")
+                tables = client.execute(
+                    "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' "
+                    "AND name IN ('atividade','dependencia','baseline',"
+                    "'baseline_ativa','baseline_atividade','idempotency')")
+                return {"ok": True, "ping": ping.rows[0][0] == 1,
+                        "expected_tables_count": int(tables.rows[0][0]),
+                        "expected_tables_total": 6, "read_only": True}
+            finally:
+                client.close()
+        try:
+            details = await asyncio.to_thread(probe_read_only)
+        except Exception as exc:
+            details = {"ok": False, "error_type": type(exc).__name__, "read_only": True}
+        await _send_json(send, 200, details)
+        return
     if path in ("/healthz", "/api/healthz"):
         configured = not bool(_MISSING) and _PRIVATE_STARTUP_ERROR is None
         await _send_json(send, 200 if configured else 503, {"ok": configured, "configured": configured, "private_startup_error": _PRIVATE_STARTUP_ERROR})
