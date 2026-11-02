@@ -21,21 +21,21 @@ from urllib.request import Request, urlopen
 
 CONFIRM = "YES_QA_ONLY"
 TARGETS = {
-    "eap": ("QA_EAP_MCP_URL", "QA_EAP_MCP_TOKEN", "arquimedes-eap-private-qa-20261102"),
-    "cronograma": ("QA_CRONOGRAMA_MCP_URL", "QA_CRONOGRAMA_MCP_TOKEN", "arquimedes-cronograma-qa-runner"),
-    "lob": ("QA_LOB_MCP_URL", "QA_LOB_MCP_TOKEN", "arquimedes-lob-private-qa-20261102"),
+    "eap": ("QA_EAP_MCP_URL", "QA_EAP_MCP_TOKEN", "arquimedes-eap-private-qa-20261102.vercel.app"),
+    "cronograma": ("QA_CRONOGRAMA_MCP_URL", "QA_CRONOGRAMA_MCP_TOKEN", "arquimedes-cronograma-qa-runner.vercel.app"),
+    "lob": ("QA_LOB_MCP_URL", "QA_LOB_MCP_TOKEN", "arquimedes-lob-private-qa-20261102.vercel.app"),
 }
 DATE_START = "2026-11-09"
 
 
 def host_guard(name: str, raw: str) -> str:
-    """Fail closed: only exact *QA-named* Vercel deployments, no redirects."""
+    """Fail closed: only the three exact Vercel QA project domains, no redirects."""
     u = urlparse(raw.strip())
-    prefix = TARGETS[name][2]
+    approved_host = TARGETS[name][2]
     hostname = (u.hostname or "").lower()
     if (u.scheme != "https" or u.username or u.password or u.port
             or u.query or u.fragment or not hostname.endswith(".vercel.app")
-            or not hostname.startswith(prefix + "-") or u.path.rstrip("/") != "/mcp"):
+            or hostname != approved_host or u.path.rstrip("/") != "/mcp"):
         raise ValueError(f"{name}: URL nao corresponde ao deployment privado QA aprovado")
     return raw.rstrip("/")
 
