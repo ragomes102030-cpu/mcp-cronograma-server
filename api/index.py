@@ -315,6 +315,29 @@ async def app(scope, receive, send):
             result = {"ok": False, "error_type": type(exc).__name__}
         await _send_json(send, 200 if result.get("ok") else 503, result)
         return
+    if (path == "/_diagnostic/private-bootstrap"
+            and scope.get("method") == "POST"
+            and os.environ.get("VERCEL_ENV") == "preview"
+            and os.environ.get("VERCEL_GIT_COMMIT_REF") == "diagnostic/turso-schema-readonly-20261102"):
+        import urllib.parse
+        event = await receive()
+        body = event.get("body", b"")
+        if len(body) > 2048:
+            await _send_json(send, 413, {"ok": False})
+            return
+        supplied = urllib.parse.parse_qs(body.decode("utf-8", "replace")).get("token", [""])[0]
+        valid_token = os.environ.get("TURSO_SCHEMA_REPAIR_TOKEN", "")
+        if not valid_token or not hmac.compare_digest(valid_token, supplied):
+            await _send_json(send, 403, {"ok": False, "reason": "unauthorized"})
+            return
+        private = await asyncio.to_thread(_load_private_app)
+        await _send_json(send, 200 if private is not None else 503, {
+            "ok": private is not None,
+            "private_app_loaded": private is not None,
+            "error_type": _PRIVATE_STARTUP_ERROR,
+            "note": "Bootstrapped private MCP import; no MCP tools invoked"
+        })
+        return
     if path in ("/healthz", "/api/healthz"):
         configured = not bool(_MISSING) and _PRIVATE_STARTUP_ERROR is None
         await _send_json(send, 200 if configured else 503, {"ok": configured, "configured": configured, "private_startup_error": _PRIVATE_STARTUP_ERROR})
