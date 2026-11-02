@@ -81,7 +81,14 @@ def test_private_integrated_flow_with_qa_fakes(monkeypatch, tmp_path):
             if name=="listar_baselines":
                 return {"total":1}
             if name=="calcular_linha_balanco":
-                return {"duracao_total_dias":14}
+                return {"duracao_total_dias":14,"atividades":[
+                    {"nome":"Estrutura","unidades":[
+                        {"unidade":"P01","inicio_dia":0,"fim_dia":4},
+                        {"unidade":"P02","inicio_dia":4,"fim_dia":8}]},
+                    {"nome":"Alvenaria","unidades":[
+                        {"unidade":"P01","inicio_dia":4,"fim_dia":9},
+                        {"unidade":"P02","inicio_dia":9,"fim_dia":14}]}
+                ]}
             if name=="gerar_gantt":
                 return {"xlsx_base64":base64.b64encode(b"PK\\x03\\x04fake-qa-zip").decode()}
             raise AssertionError(name)
@@ -92,6 +99,8 @@ def test_private_integrated_flow_with_qa_fakes(monkeypatch, tmp_path):
     assert result["persistent_test_data_retained"] is True
     assert (result["eap_nodes"],result["activities"],result["dependencies"])==(4,5,5)
     assert result["cpm_days"]==16 and result["lob_days_after_mobilization"]==14
+    assert len(result["cpm_lob_comparisons"])==4
+    assert all(row["coincide"] for row in result["cpm_lob_comparisons"])
     assert (tmp_path/"relatorio_qa_privado.json").is_file()
     assert (tmp_path/"gantt_qa_privado.xlsx").read_bytes().startswith(b"PK")
     tools=[name for _,name,_ in history]
