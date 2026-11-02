@@ -208,13 +208,18 @@ async def app(scope, receive, send):
             client = libsql_client.create_client_sync(url=url, auth_token=token)
             try:
                 ping = client.execute("SELECT 1 AS ping")
+                expected = {"atividade", "dependencia", "baseline",
+                            "baseline_ativa", "baseline_atividade", "idempotency"}
                 tables = client.execute(
-                    "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' "
+                    "SELECT name FROM sqlite_master WHERE type='table' "
                     "AND name IN ('atividade','dependencia','baseline',"
                     "'baseline_ativa','baseline_atividade','idempotency')")
+                present = {str(row[0]) for row in tables.rows}
                 return {"ok": True, "ping": ping.rows[0][0] == 1,
-                        "expected_tables_count": int(tables.rows[0][0]),
-                        "expected_tables_total": 6, "read_only": True}
+                        "expected_tables_count": len(present),
+                        "expected_tables_total": len(expected),
+                        "missing_tables": sorted(expected - present),
+                        "read_only": True}
             finally:
                 client.close()
         try:
