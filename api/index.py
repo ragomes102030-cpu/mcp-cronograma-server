@@ -190,6 +190,27 @@ async def app(scope, receive, send):
     if scope["type"] != "http":
         return
     path = scope.get("path", "")
+    # TEMPORARY BRANCH ONLY: QA project ID guard prevents test routes in real MCP.
+    if path in ("/_qa/readiness", "/_qa/roundtrip"):
+        from . import qa_probe
+        if os.environ.get("VERCEL_PROJECT_ID") != qa_probe.QA_PROJECT:
+            await _send_json(send, 404, {"ok": False, "error": "Not found"})
+            return
+        if path == "/_qa/readiness" and scope.get("method") == "GET":
+            await _send_json(send, 200, qa_probe.readiness())
+            return
+        if path == "/_qa/roundtrip" and scope.get("method") == "POST":
+            headers = {k.lower(): v for k,v in scope.get("headers", [])}
+            if not qa_probe.authorised(headers):
+                await _send_json(send, 403, {"ok": False, "error": "QA authorization denied"})
+                return
+            from urllib.parse import parse_qs
+            driver = parse_qs(scope.get("query_string", b"").decode()).get("driver", [""])[0]
+            result = await asyncio.to_thread(qa_probe.run, driver)
+            await _send_json(send, 200 if result.get("ok") else 503, result)
+            return
+        await _send_json(send, 405, {"ok": False, "error": "Unsupported QA method"})
+        return
     if path in ("/healthz", "/api/healthz"):
         configured = not bool(_MISSING) and _PRIVATE_STARTUP_ERROR is None
         await _send_json(send, 200 if configured else 503, {"ok": configured, "configured": configured, "private_startup_error": _PRIVATE_STARTUP_ERROR})
