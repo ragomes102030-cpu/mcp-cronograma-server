@@ -9,15 +9,15 @@ on:
         required: true
         type: string
       eap_qa_url:
-        description: 'Endpoint privado /mcp do deployment EAP QA'
+        description: 'Endpoint /mcp no domínio canônico EAP QA'
         required: true
         type: string
       cronograma_qa_url:
-        description: 'Endpoint privado /mcp do deployment Cronograma QA'
+        description: 'Endpoint /mcp no domínio canônico Cronograma QA'
         required: true
         type: string
       lob_qa_url:
-        description: 'Endpoint privado /mcp do deployment Gantt/LOB QA'
+        description: 'Endpoint /mcp no domínio canônico Gantt/LOB QA'
         required: true
         type: string
 

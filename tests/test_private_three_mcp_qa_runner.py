@@ -11,18 +11,19 @@ from scripts import qa_three_private_mcps as qa
 def test_qa_guards_deny_production_and_untrusted_urls(monkeypatch):
     bad = [
         "https://arquimedes-mcp-eap.vercel.app/mcp",
+        "https://arquimedes-eap-private-qa-20261102-x.vercel.app/mcp",
         "https://arquimedes-eap-private-qa-20261102.vercel.app/public-mcp",
-        "http://arquimedes-eap-private-qa-20261102-x.vercel.app/mcp",
-        "https://arquimedes-eap-private-qa-20261102-x.vercel.app.evil.test/mcp",
-        "https://user:pass@arquimedes-eap-private-qa-20261102-x.vercel.app/mcp",
-        "https://arquimedes-eap-private-qa-20261102-x.vercel.app/mcp?token=bad",
-        "https://arquimedes-eap-private-qa-20261102-x.vercel.app/anything",
+        "http://arquimedes-eap-private-qa-20261102.vercel.app/mcp",
+        "https://arquimedes-eap-private-qa-20261102.vercel.app.evil.test/mcp",
+        "https://user:pass@arquimedes-eap-private-qa-20261102.vercel.app/mcp",
+        "https://arquimedes-eap-private-qa-20261102.vercel.app/mcp?token=bad",
+        "https://arquimedes-eap-private-qa-20261102.vercel.app/anything",
     ]
     for url in bad:
         with pytest.raises(ValueError):
             qa.host_guard("eap", url)
     assert qa.host_guard(
-        "eap", "https://arquimedes-eap-private-qa-20261102-x.vercel.app/mcp/"
+        "eap", "https://arquimedes-eap-private-qa-20261102.vercel.app/mcp/"
     ).endswith("/mcp")
     monkeypatch.delenv("QA_PRIVATE_E2E_CONFIRM", raising=False)
     with pytest.raises(ValueError, match="YES_QA_ONLY"):
