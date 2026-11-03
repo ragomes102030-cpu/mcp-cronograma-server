@@ -44,7 +44,7 @@ jobs:
           print('QA privado aprovado para executar: 9 pacotes, 21 atividades, 30 vinculos, 100% peso declarado')
           PY
       - name: Rodar obra completa no ambiente QA privado
-        run: python scripts/qa_private_four_floor_complete.py --execute --output-dir qa-obra4p-completa
+        run: python -m scripts.qa_private_four_floor_complete --execute --output-dir qa-obra4p-completa
       - name: Arquivar os dois Gantts, relatorio e eventual falha
         if: always()
         uses: actions/upload-artifact@v4
