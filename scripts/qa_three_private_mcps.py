@@ -143,9 +143,13 @@ def run(config: dict, *, export_dir: Path) -> dict:
 
     # One unique QA project in the isolated databases. No 'default' identifier.
     invoke("eap", "criar_projeto", {"project_id": project_id, "nome": "QA Integracao Tres MCPs"})
-    root = invoke("eap", "criar_eap_node", {
-        "project_id": project_id, "nome": "Obra QA", "tipo_frente": "infraestrutura",
-        "request_id": project_id + "-root"})
+    # criar_projeto auto-creates the EAP root. Creating a second root is
+    # structurally invalid and was caught by live QA run 41505283877.
+    initial_tree = invoke("eap", "get_eap_tree", {"project_id": project_id})
+    roots = initial_tree.get("raizes", [])
+    if len(roots) != 1:
+        raise AssertionError(f"EAP projeto QA deveria ter uma raiz, recebeu {len(roots)}")
+    root = roots[0]
     root_id = root["eap_id"]
     group = invoke("eap", "criar_eap_node", {
         "project_id": project_id, "nome": "Pavimentos tipo", "parent_id": root_id,
