@@ -23,7 +23,7 @@ pré-definidos. Regras de falha segura:
    Ausência de qualquer requisito impede a primeira requisição.
 4. Negocia JSON-RPC MCP `initialize` / `notifications/initialized` /
    `tools/list` e exige o catálogo privado esperado antes de escrever dados.
-5. O MCP EAP cria projeto, raiz, agrupamento e duas folhas com UIDs. O MCP
+5. O MCP EAP cria o projeto **e sua raiz automaticamente**. O runner recupera a raiz por `get_eap_tree`, cria apenas agrupamento e duas folhas com UIDs. O MCP
    Cronograma grava cinco atividades vinculadas às referências EAP, cinco
    dependências, calcula CPM persistido e salva uma baseline. O MCP Gantt/LOB
    calcula as duas unidades e gera um Excel a partir das datas reais do CPM.
@@ -78,3 +78,5 @@ constituem homologação remota**.
 
 **Não abrangido:** cálculo de custos, regra contratual dos 100% da EAP,
 autorização multiusuário, backups da obra, homologação de produção.
+
+**Regressão corrigida (02/11/2026):** a execução real 41505283877 encontrou duas raízes porque o teste criava outra raiz depois de `criar_projeto`. Corrigido para reutilizar a raiz do projeto e exigir estrutura com uma única raiz. Este registro não é resultado de homologação completa.
