@@ -59,9 +59,9 @@ def test_private_integrated_flow_with_qa_fakes(monkeypatch, tmp_path):
                 assert args["tipo_frente"] in {"infraestrutura", "estrutura", "alvenaria"}
                 counters["eap"]+=1
                 num=counters["eap"]
-                return {"eap_id":["1","1.1","1.1.1","1.1.2"][num-1],"uid":f"qa-uid-{num}"}
+                return {"eap_id":["1.1","1.1.1","1.1.2"][num-1],"uid":f"qa-uid-{num}"}
             if name=="get_eap_tree":
-                return {"raizes":[{"eap_id":"1"}]}
+                return {"raizes":[{"eap_id":"1","uid":"qa-auto-root","nome":"QA Integracao Tres MCPs"}]}
             if name=="validar_estrutura":
                 return {"valido":True,"erros":[]}
             if name=="criar_atividade":
@@ -107,6 +107,8 @@ def test_private_integrated_flow_with_qa_fakes(monkeypatch, tmp_path):
     assert (tmp_path/"relatorio_qa_privado.json").is_file()
     assert (tmp_path/"gantt_qa_privado.xlsx").read_bytes().startswith(b"PK")
     tools=[name for _,name,_ in history]
-    assert tools.index("criar_eap_node")<tools.index("criar_atividade")
+    assert tools.index("get_eap_tree") < tools.index("criar_eap_node") < tools.index("criar_atividade")
+    assert sum(name == "criar_eap_node" for name in tools) == 3
+    assert history[tools.index("criar_eap_node")][2]["parent_id"] == "1"
     assert tools.index("calcular_caminho_critico")<tools.index("gerar_gantt")
     assert all(args.get("project_id","")!="default" for _,_,args in history)
