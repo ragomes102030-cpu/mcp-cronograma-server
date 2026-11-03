@@ -1,0 +1,56 @@
+name: QA — Dicionário EAP e Balanceamento LOB
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Digite YES_QA_ONLY para atualizar apenas os 9 pacotes no projeto de QA conhecido'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arquimedes-private-disposable-qa
+  cancel-in-progress: false
+
+jobs:
+  qa-dictionary-lob:
+    if: ${{ inputs.confirm == 'YES_QA_ONLY' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      QA_PRIVATE_E2E_CONFIRM: ${{ inputs.confirm }}
+      QA_DICTIONARY_BALANCE_CONFIRM: ${{ inputs.confirm }}
+      QA_EAP_MCP_URL: https://arquimedes-eap-private-qa-20261102.vercel.app/mcp
+      QA_CRONOGRAMA_MCP_URL: https://arquimedes-cronograma-qa-runner.vercel.app/mcp
+      QA_LOB_MCP_URL: https://arquimedes-lob-private-qa-20261102.vercel.app/mcp
+      QA_EAP_MCP_TOKEN: ${{ secrets.QA_EAP_MCP_TOKEN }}
+      QA_CRONOGRAMA_MCP_TOKEN: ${{ secrets.QA_CRONOGRAMA_MCP_TOKEN }}
+      QA_LOB_MCP_TOKEN: ${{ secrets.QA_LOB_MCP_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verificar credenciais e projeto exato QA
+        run: |
+          python - <<'PY'
+          from scripts.qa_three_private_mcps import config_from_env
+          from scripts.qa_dictionary_lob_review import QA_PROJECT,validate_scope_and_dictionary
+          assert set(config_from_env()) == {'eap','cronograma','lob'}
+          assert QA_PROJECT == 'qa-obra4p-741e8662e406'
+          validate_scope_and_dictionary()
+          print('Preflight completo: apenas EAP QA selecionada; cronograma original somente leitura')
+          PY
+      - name: Completar 9 dicionarios e simular ritmos sem alterar CPM
+        run: python -m scripts.qa_dictionary_lob_review --execute --output-dir qa-dicionario-lob
+      - name: Arquivar evidencias da execucao ou falha
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arquimedes-qa-dicionario-eap-lob
+          path: qa-dicionario-lob/
+          if-no-files-found: warn
+          retention-days: 7
