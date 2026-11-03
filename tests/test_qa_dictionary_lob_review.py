@@ -46,7 +46,7 @@ def test_qa_dictionary_and_lob_full_mock(monkeypatch,tmp_path):
             self.name=url
         def connect(self):
             return {"get_eap_tree","definir_criterio","pacotes_sem_dono","validar_estrutura",
-                    "listar_atividades","listar_baselines",
+                    "listar_atividades","listar_baselines","calcular_cpm_com_evidencia",
                     "balancear_ritmos_lob","calcular_linha_balanco"}
         def call(self,tool,args):
             log.append((self.name,tool,args))
@@ -63,6 +63,13 @@ def test_qa_dictionary_and_lob_full_mock(monkeypatch,tmp_path):
                     edits.append(found["uid"])
                     return found.copy()
             if self.name=="cronograma":
+                if tool=="calcular_cpm_com_evidencia":
+                    assert len(args["atividades"])==21 and len(args["dependencias"])==30
+                    byid={a["id"]:a["duracao_dias"] for a in args["atividades"]}
+                    d=byid["A03"]
+                    a=byid["A07"]
+                    expected={(4,4):42,(4,2):40,(2,2):38,(2,4):40}[(d,a)]
+                    return {"valid":True,"duracao_projeto_dias":expected,"persistido":False}
                 if tool=="listar_atividades":
                     return {"total":21,"atividades":[{"id":f"a{i}"} for i in range(21)]}
                 if tool=="listar_baselines":
@@ -96,6 +103,8 @@ def test_qa_dictionary_and_lob_full_mock(monkeypatch,tmp_path):
     assert (report["cronograma_inalterado"],report["baseline_ativa_preservada"])==(True,True)
     assert len(edits)==9
     assert [x["prazo_lob_dias"] for x in report["cenarios"]]==[30,28,26,28]
+    assert [x["prazo_cpm_obra_completa_desde_bl0_dias"] for x in report["cenarios"]]==[42,40,38,40]
+    assert all(x["cpm_persistido"] is False for x in report["cenarios"])
     assert (tmp_path/"qa_dicionario_e_balanceamento.json").is_file()
     assert all(name not in ("atualizar_atividade","salvar_baseline","criar_dependencia") for _,name,_ in log)
 
