@@ -1,0 +1,55 @@
+name: QA — Obra 4 Pavimentos (3 MCPs privados)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Digite YES_QA_ONLY: grava obra ficticia e duas baselines em bancos QA descartaveis'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arquimedes-private-disposable-qa
+  cancel-in-progress: false
+
+jobs:
+  qa-full-obra:
+    if: ${{ inputs.confirm == 'YES_QA_ONLY' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      QA_PRIVATE_E2E_CONFIRM: ${{ inputs.confirm }}
+      QA_EAP_MCP_URL: https://arquimedes-eap-private-qa-20261102.vercel.app/mcp
+      QA_CRONOGRAMA_MCP_URL: https://arquimedes-cronograma-qa-runner.vercel.app/mcp
+      QA_LOB_MCP_URL: https://arquimedes-lob-private-qa-20261102.vercel.app/mcp
+      QA_EAP_MCP_TOKEN: ${{ secrets.QA_EAP_MCP_TOKEN }}
+      QA_CRONOGRAMA_MCP_TOKEN: ${{ secrets.QA_CRONOGRAMA_MCP_TOKEN }}
+      QA_LOB_MCP_TOKEN: ${{ secrets.QA_LOB_MCP_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Confirmar escopo e guardas de conexao QA sem escrever
+        run: |
+          python - <<'PY'
+          from scripts.qa_three_private_mcps import config_from_env
+          from scripts.qa_private_four_floor_complete import validate_declared_scope
+          assert set(config_from_env()) == {'eap','cronograma','lob'}
+          plan=validate_declared_scope()
+          assert plan['peso_escopo_pct']==100 and plan['atividades']==21
+          print('QA privado aprovado para executar: 9 pacotes, 21 atividades, 30 vinculos, 100% peso declarado')
+          PY
+      - name: Rodar obra completa no ambiente QA privado
+        run: python scripts/qa_private_four_floor_complete.py --execute --output-dir qa-obra4p-completa
+      - name: Arquivar os dois Gantts, relatorio e eventual falha
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arquimedes-qa-obra4p-3mcps
+          path: qa-obra4p-completa/
+          if-no-files-found: warn
+          retention-days: 7
