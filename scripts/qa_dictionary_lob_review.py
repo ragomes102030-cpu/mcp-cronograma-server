@@ -15,7 +15,7 @@ from pathlib import Path
 import re
 
 from scripts.qa_three_private_mcps import Mcp, config_from_env
-from scripts.qa_private_four_floor_complete import PACKAGES, FLOORS, START
+from scripts.qa_private_four_floor_complete import PACKAGES, FLOORS, START, SPECS, EDGES, validate_declared_scope
 
 QA_PROJECT = "qa-obra4p-741e8662e406"
 QA_CONFIRM = "YES_QA_ONLY"
@@ -143,7 +143,7 @@ def run(cfg: dict, output_dir: Path):
     clients={n:Mcp(**cfg[n]) for n in ("eap","cronograma","lob")}
     needed={
         "eap":{"get_eap_tree","definir_criterio","pacotes_sem_dono","validar_estrutura"},
-        "cronograma":{"listar_atividades","listar_baselines"},
+        "cronograma":{"listar_atividades","listar_baselines","calcular_cpm_com_evidencia"},
         "lob":{"balancear_ritmos_lob","calcular_linha_balanco"},
     }
     for name,c in clients.items():
@@ -230,17 +230,33 @@ def run(cfg: dict, output_dir: Path):
             sim=call("lob","calcular_linha_balanco",{
                 "atividades":specs,"unidades":list(FLOORS),
                 "data_inicio":(START.replace(day=18)).isoformat()})
+            # Independent CPM what-if: in-memory, not applied to private project.
+            # The starting point is the original 42-day BL0, not active 44-day BL1.
+            original=validate_declared_scope()["duracoes"]
+            crew_factor={"estrutura":counts[0],"alvenaria":counts[1]}
+            acts=[{"id":key,"duracao_dias":int(original[key]/crew_factor.get(pack,1))}
+                  for key,pack,_loc,_qty in SPECS]
+            dependencies=[{"predecessora_id":a,"sucessora_id":b,"tipo":"TI","lag_dias":0}
+                          for a,b in EDGES]
+            cpm_what_if=call("cronograma","calcular_cpm_com_evidencia",{
+                "atividades":acts,"dependencias":dependencies})
+            if cpm_what_if.get("valid") is not True:
+                raise AssertionError(f"CPM what-if invalido: {name}")
             wait={x["nome"]:x["espera_total_dias"] for x in sim["atividades"]}
             risk={x["nome"]:bool(x["risco_interferencia"]) for x in sim["atividades"]}
             scenarios.append({
                 "cenario":name,"equipes":list(counts),
                 "prazo_lob_dias":sim["duracao_total_dias"],
+                "prazo_cpm_obra_completa_desde_bl0_dias":cpm_what_if["duracao_projeto_dias"],
+                "cpm_persistido":bool(cpm_what_if.get("persistido",False)),
                 "espera_dias_por_servico":wait,
                 "riscos_interferencia":risk,
                 "alterou_plano":False,
                 "restricoes":"Produtividades e recursos supostos; nao substitui orcamento, validacao de campo ou CPM reprogramado",
             })
         assert [x["prazo_lob_dias"] for x in scenarios]==[30,28,26,28]
+        assert [x["prazo_cpm_obra_completa_desde_bl0_dias"] for x in scenarios]==[42,40,38,40]
+        assert not any(x["cpm_persistido"] for x in scenarios)
         hydro_name=base_specs[2]["nome"]
         assert [x["espera_dias_por_servico"][hydro_name] for x in scenarios]==[6,6,0,6]
 
