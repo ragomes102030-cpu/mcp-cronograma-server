@@ -1,6 +1,5 @@
 """QA regression: dictionary completeness + scenario comparison without touching CPM."""
 import copy
-from pathlib import Path
 import pytest
 
 from scripts import qa_dictionary_lob_review as runner
