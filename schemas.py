@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ErroOutput(BaseModel):
@@ -58,5 +58,10 @@ class CaminhoCriticoOutput(BaseModel):
     total_atividades: int
     caminho_critico: list[dict[str, Any]]
     atividades: list[dict[str, Any]]
+    # Metadados retornados pelo motor CPM privado (mcp-cronograma models/cpm.py).
+    # Campos opcionais preservam contratos legados e extra=forbid continua ativo.
+    atividades_sem_vinculo: list[str] = Field(default_factory=list)
+    rede_sem_dependencias: bool = False
+    premissa_temporal: str = "duracoes em dias corridos relativos; calendario nao aplicado"
 
     model_config = ConfigDict(extra="forbid")
