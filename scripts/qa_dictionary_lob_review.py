@@ -127,7 +127,8 @@ def validate_scope_and_dictionary():
     assert sum(p[6] for p in PACKAGES)==100
     for key in DICTIONARY:
         d=build_dictionary(key)
-        assert all(d.values()) and len(d["descricao"])>100 and len(d["criterio_medicao"])>40\n        assert len(d["responsavel"])>15 and d["disciplina"].strip()
+        assert all(d.values()) and len(d["descricao"])>100 and len(d["criterio_medicao"])>40
+        assert len(d["responsavel"])>15 and d["disciplina"].strip()
         assert all(tag in d["descricao"] for tag in ("INCLUSÕES:","EXCLUSÕES:","CRITÉRIO DE ACEITAÇÃO (QA):"))
         assert d["responsavel"].startswith("Papel QA - ")
 
