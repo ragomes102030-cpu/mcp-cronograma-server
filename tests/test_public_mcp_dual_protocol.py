@@ -16,7 +16,8 @@ HOSTS = {
 EXPECTED = {
     "eap": {"avaliar_evidencia_eap", "validar_estrutura_eap"},
     "cronograma": {"calcular_duracao_com_evidencia", "calcular_cpm_com_evidencia",
-                   "calcular_cpm_com_calendario", "comparar_baseline_sem_persistencia"},
+                   "calcular_cpm_com_calendario", "comparar_baseline_sem_persistencia",
+                   "diagnosticar_rede_cpm"},
 }
 
 
