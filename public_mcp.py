@@ -153,6 +153,58 @@ def calcular_cpm_com_evidencia(atividades: list[dict], dependencias: list[dict])
             "premissa":"tempos relativos; calendario de trabalho nao aplicado"}
 
 @public_mcp.tool()
+def diagnosticar_rede_cpm(atividades: list[dict], dependencias: list[dict]) -> dict:
+    """Diagnostica ciclos, referencias invalidas e atividades isoladas sem persistencia."""
+    erros: list[dict] = []
+    if not isinstance(atividades, list) or not isinstance(dependencias, list):
+        return {"valid": False, "erros": [{"codigo": "ENTRADA_INVALIDA"}], "persistido": False}
+    if not 1 <= len(atividades) <= 150 or len(dependencias) > 400:
+        return {"valid": False, "erros": [{"codigo": "LIMITE_EXCEDIDO"}], "persistido": False}
+    ids: set[str] = set()
+    for a in atividades:
+        if not isinstance(a, dict) or not str(a.get("id") or "").strip():
+            erros.append({"codigo": "ATIVIDADE_SEM_ID"})
+            continue
+        ident = str(a["id"]).strip()
+        if ident in ids:
+            erros.append({"codigo": "ID_DUPLICADO", "atividade": ident})
+        ids.add(ident)
+    adj: dict[str, list[str]] = {ident: [] for ident in ids}
+    grau = {ident: 0 for ident in ids}
+    vinculadas: set[str] = set()
+    for dep in dependencias:
+        if not isinstance(dep, dict):
+            erros.append({"codigo": "DEPENDENCIA_INVALIDA"})
+            continue
+        p = str(dep.get("predecessora_id") or "").strip()
+        s = str(dep.get("sucessora_id") or "").strip()
+        if p not in ids or s not in ids:
+            erros.append({"codigo": "REFERENCIA_INEXISTENTE", "predecessora_id": p, "sucessora_id": s})
+        elif p == s:
+            erros.append({"codigo": "AUTO_REFERENCIA", "atividade": p})
+        else:
+            adj[p].append(s)
+            grau[s] += 1
+            vinculadas.update((p, s))
+    fila = [x for x in ids if grau[x] == 0]
+    visitados = 0
+    while fila:
+        x = fila.pop()
+        visitados += 1
+        for s in adj[x]:
+            grau[s] -= 1
+            if grau[s] == 0:
+                fila.append(s)
+    if visitados < len(ids):
+        erros.append({"codigo": "CICLO", "atividades_envolvidas_ou_bloqueadas": sorted(x for x in ids if grau[x] > 0)})
+    if len(ids) > 1 and not dependencias:
+        erros.append({"codigo": "REDE_SEM_DEPENDENCIAS"})
+    return {"valid": not erros, "erros": erros,
+            "atividades_sem_vinculo": sorted(ids - vinculadas) if len(ids) > 1 else [],
+            "persistido": False, "origem": "dados_da_chamada"}
+
+
+@public_mcp.tool()
 def calcular_cpm_com_calendario(
     atividades: list[dict], dependencias: list[dict], data_inicio: str,
     calendario: dict,
