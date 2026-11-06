@@ -59,7 +59,10 @@ def calcular_cpm_com_evidencia(atividades: list[dict], dependencias: list[dict])
         t=str(dep.get("tipo","TI")).upper()
         try: lag=float(dep.get("lag_dias",0) or 0)
         except (TypeError,ValueError): raise ValueError("lag_dias invalido")
-        if p not in dur or s not in dur or p==s: raise ValueError("Dependencia com ID inexistente ou auto-referencia")
+        if p not in dur or s not in dur or p==s:
+            return {**diagnosticar_rede_cpm(atividades, dependencias),
+                    "valid": False,
+                    "erro": "Dependencia com ID inexistente ou auto-referencia"}
         if t not in ("TI","II","TT","IT") or not math.isfinite(lag) or abs(lag)>1e6:
             raise ValueError("Tipo/lag de dependencia invalido")
         # Constraint: ES[s] >= ES[p] + weight
@@ -79,9 +82,13 @@ def calcular_cpm_com_evidencia(atividades: list[dict], dependencias: list[dict])
         for s,_ in outgoing[x]:
             degree[s]-=1
             if degree[s]==0:fila.append(s)
-    if len(ordem)!=len(dur): raise ValueError("Rede com ciclo: CPM recusado")
+    if len(ordem)!=len(dur):
+        return {**diagnosticar_rede_cpm(atividades, dependencias),
+                "valid": False, "erro": "Rede com ciclo: CPM recusado"}
     if len(dur)>1 and not edges:
-        raise ValueError("Rede vazia de dependencias: informe a sequencia de atividades")
+        return {**diagnosticar_rede_cpm(atividades, dependencias),
+                "valid": False,
+                "erro": "Rede vazia de dependencias: informe a sequencia de atividades"}
     es={x:0.0 for x in dur}
     for x in ordem:
         for s,w in outgoing[x]:
