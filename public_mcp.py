@@ -1,6 +1,7 @@
 """MCP publico: calculos em memoria, sem ler ou alterar bancos de obras."""
 from __future__ import annotations
 import math
+from collections import deque
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp_http_security import allowed_mcp_hosts
@@ -37,8 +38,8 @@ def calcular_cpm_com_evidencia(atividades: list[dict], dependencias: list[dict])
     """CPM em memoria. TI/FS, II/SS, TT/FF, IT/SF; duracoes em dias, lag positivo ou negativo."""
     if not isinstance(atividades,list) or not isinstance(dependencias,list):
         raise ValueError("Forneca duas listas.")
-    if not 1 <= len(atividades) <= 150 or not 0 <= len(dependencias) <= 400:
-        raise ValueError("Limite: 1-150 atividades, 0-400 dependencias.")
+    if not 1 <= len(atividades) <= 2000 or not 0 <= len(dependencias) <= 10000:
+        raise ValueError("Limite: 1-2000 atividades, 0-10000 dependencias.")
     dur: dict[str, float] = {}
     for a in atividades:
         if not isinstance(a,dict) or not str(a.get("id") or "").strip():
@@ -57,6 +58,7 @@ def calcular_cpm_com_evidencia(atividades: list[dict], dependencias: list[dict])
         p=str(dep.get("predecessora_id") or "").strip()
         s=str(dep.get("sucessora_id") or "").strip()
         t=str(dep.get("tipo","TI")).upper()
+        t={"FS":"TI","SS":"II","FF":"TT","SF":"IT"}.get(t,t)
         try: lag=float(dep.get("lag_dias",0) or 0)
         except (TypeError,ValueError): raise ValueError("lag_dias invalido")
         if p not in dur or s not in dur or p==s:
@@ -75,10 +77,10 @@ def calcular_cpm_com_evidencia(atividades: list[dict], dependencias: list[dict])
         incoming[s].append((p,w))
         outgoing[p].append((s,w))
         degree[s]+=1
-    fila=[x for x in dur if degree[x]==0]
+    fila=deque(x for x in dur if degree[x]==0)
     ordem=[]
     while fila:
-        x=fila.pop(0);ordem.append(x)
+        x=fila.popleft();ordem.append(x)
         for s,_ in outgoing[x]:
             degree[s]-=1
             if degree[s]==0:fila.append(s)
@@ -131,23 +133,24 @@ def calcular_cpm_com_evidencia(atividades: list[dict], dependencias: list[dict])
     limite_caminhos = 128
     caminhos_truncados = False
 
-    def percorrer(atual: str, caminho: list[str]) -> None:
-        nonlocal caminhos_truncados
-        if caminhos_truncados:
-            return
-        proximos = tight_adj[atual]
-        if not proximos:
-            if abs(ef[atual] - prazo) < 1e-6:
-                if len(caminhos_criticos) >= limite_caminhos:
-                    caminhos_truncados = True
-                else:
-                    caminhos_criticos.append(caminho)
-            return
-        for proximo in proximos:
-            percorrer(proximo, caminho + [proximo])
-
+    # DFS iterativa: redes extensas nao estouram o limite de recursao Python.
+    # Preserva ordem deterministica, no maximo 128 caminhos completos.
     for raiz in roots:
-        percorrer(raiz, [raiz])
+        pilha: list[tuple[str, list[str]]] = [(raiz, [raiz])]
+        while pilha:
+            atual, caminho = pilha.pop()
+            proximos = tight_adj[atual]
+            if not proximos:
+                if abs(ef[atual] - prazo) < 1e-6:
+                    if len(caminhos_criticos) >= limite_caminhos:
+                        caminhos_truncados = True
+                        break
+                    caminhos_criticos.append(caminho)
+                continue
+            for proximo in reversed(proximos):
+                pilha.append((proximo, caminho + [proximo]))
+        if caminhos_truncados:
+            break
     vinculadas = {ident for p,s,_ in edges for ident in (p,s)}
     sem_vinculo = [ident for ident in dur if ident not in vinculadas] if len(dur) > 1 else []
     return {"valid":True,"duracao_projeto_dias":round(prazo,6),
@@ -165,7 +168,7 @@ def diagnosticar_rede_cpm(atividades: list[dict], dependencias: list[dict]) -> d
     erros: list[dict] = []
     if not isinstance(atividades, list) or not isinstance(dependencias, list):
         return {"valid": False, "erros": [{"codigo": "ENTRADA_INVALIDA"}], "persistido": False}
-    if not 1 <= len(atividades) <= 150 or len(dependencias) > 400:
+    if not 1 <= len(atividades) <= 2000 or len(dependencias) > 10000:
         return {"valid": False, "erros": [{"codigo": "LIMITE_EXCEDIDO"}], "persistido": False}
     ids: set[str] = set()
     for a in atividades:

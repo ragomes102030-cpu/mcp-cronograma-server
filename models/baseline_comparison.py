@@ -6,8 +6,8 @@ from datetime import date
 
 
 def _indexar(itens: list[dict], rotulo: str) -> dict[str, dict]:
-    if not isinstance(itens, list) or len(itens) > 500:
-        raise ValueError(f"{rotulo}: lista invalida ou maior que 500")
+    if not isinstance(itens, list) or len(itens) > 2000:
+        raise ValueError(f"{rotulo}: lista invalida ou maior que 2000")
     saida = {}
     for item in itens:
         if not isinstance(item, dict):
