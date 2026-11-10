@@ -252,12 +252,30 @@ def comparar_baseline_sem_persistencia(baseline: list[dict], atual: list[dict]) 
     return comparar_baseline_em_memoria(baseline, atual)
 
 
-public_app = public_mcp.streamable_http_app(
-    stateless_http=True,
-    json_response=True,
-    transport_security=TransportSecuritySettings(
-        enable_dns_rebinding_protection=True,
-        allowed_origins=allowed_public_origins(),
-        allowed_hosts=allowed_mcp_hosts("arquimedes-mcp-cronograma.vercel.app", "mcp-cronograma-server.onrender.com"),
-    ),
-)
+def create_public_app():
+    """Create an isolated stateless public ASGI app for a legacy HTTP request."""
+    request_server = MCPServer(
+        name="arquimedes-cronograma-publico",
+        instructions=("Calculos anonimos em memoria e sem persistencia de obras. "
+                      "Nenhuma atividade, dependencia, baseline ou projeto e alterado."),
+    )
+    request_server.add_tool(calcular_duracao_com_evidencia)
+    request_server.add_tool(calcular_cpm_com_evidencia)
+    request_server.add_tool(diagnosticar_rede_cpm)
+    request_server.add_tool(calcular_cpm_com_calendario)
+    request_server.add_tool(comparar_baseline_sem_persistencia)
+    return request_server.streamable_http_app(
+        stateless_http=True,
+        json_response=True,
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_origins=allowed_public_origins(),
+            allowed_hosts=allowed_mcp_hosts(
+                "arquimedes-mcp-cronograma.vercel.app",
+                "mcp-cronograma-server.onrender.com",
+            ),
+        ),
+    )
+
+
+public_app = create_public_app()
