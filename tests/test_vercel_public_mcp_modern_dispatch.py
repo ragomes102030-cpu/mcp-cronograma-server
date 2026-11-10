@@ -11,6 +11,7 @@ def test_modern_discover_and_tools_list_expose_chronogram_tools():
                                        "method": "tools/list", "params": {}})
 
     assert "2026-07-28" in discover["result"]["supportedVersions"]
+    assert discover["result"]["capabilities"] == {"tools": {}}
     names = {tool["name"] for tool in listed["result"]["tools"]}
     assert names == {
         "calcular_duracao_com_evidencia", "calcular_cpm_com_evidencia",

@@ -73,9 +73,7 @@ def _dispatch_modern_jsonrpc(request):
     if method == "server/discover":
         return {"jsonrpc": "2.0", "id": request_id, "result": {
             "cacheScope": "private",
-            "capabilities": {"prompts": {"listChanged": True},
-                             "resources": {"listChanged": True, "subscribe": True},
-                             "tools": {"listChanged": True}},
+            "capabilities": {"tools": {}},
             "instructions": ("Calculos publicos de cronograma em memoria. Analisa somente os "
                              "dados fornecidos na chamada; nao consulta ou altera obras, atividades, "
                              "dependencias ou baselines."),
