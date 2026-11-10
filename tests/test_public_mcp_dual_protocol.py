@@ -6,7 +6,8 @@ No production credentials, network calls or project mutations are involved.
 import os
 import unittest
 from starlette.testclient import TestClient
-from api.index import app
+from api import index as adapter
+from public_mcp import create_public_app
 
 TARGET = os.environ["MCP_TARGET"]
 HOSTS = {
@@ -67,7 +68,14 @@ class TestDualProtocol(unittest.TestCase):
         return payload["result"]
 
     def test_legacy_and_modern(self):
-        with TestClient(app, base_url=HOSTS[TARGET]) as client:
+        # Each TestClient gets its own FastMCP session manager. The Vercel
+        # request adapter also creates a fresh public app per request; reusing
+        # the module-global app here leaves lifespan state shared with other
+        # tests and can block shutdown after the protocol assertions pass.
+        previous_public_app = adapter._public_app
+        adapter._public_app = create_public_app()
+        self.addCleanup(setattr, adapter, "_public_app", previous_public_app)
+        with TestClient(adapter.app, base_url=HOSTS[TARGET]) as client:
             get = client.get("/public-mcp", headers={"Accept": "application/json"})
             self.assertEqual(get.status_code, 200, get.text[:400])
             self.assertTrue(get.json().get("ok"))
