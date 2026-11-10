@@ -4,7 +4,10 @@ from starlette.testclient import TestClient
 from api.index import app
 
 
-def test_public_cors_preflight_and_private_isolation():
+def test_public_cors_preflight_and_private_isolation(monkeypatch):
+    monkeypatch.setenv(
+        "MCP_PUBLIC_ALLOWED_ORIGINS", "https://independent-client.example"
+    )
     base_url = "https://arquimedes-mcp-cronograma.vercel.app"
     # These probes never enter the MCP transport; avoid starting its single-use
     # ASGI session-manager lifespan just for OPTIONS and GET checks.
