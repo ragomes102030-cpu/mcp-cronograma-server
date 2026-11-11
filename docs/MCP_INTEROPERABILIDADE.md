@@ -25,6 +25,25 @@ antes de afirmar que alguma funcionalidade nova está em produção.
 - Esses testes confirmam o transporte entre SDKs, **não validam as interfaces
   fechadas do Claude, do ChatGPT ou de todos os clientes disponíveis**.
 
+## Integridade da rede e liberação para CPM
+
+- `diagnosticar_rede_cpm.valid` informa somente se IDs, referências e ciclos da
+  rede estão estruturalmente válidos. Não significa que uma relação tenha sido
+  aprovada nem que a rede esteja pronta para CPM.
+- `pronto_para_cpm` só é verdadeiro quando a rede é estruturalmente válida, não
+  tem atividades isoladas, todas as atividades têm duração positiva e, quando o
+  chamador envia metadados de aprovação, todas as relações têm `status`
+  `APROVADA` ou `APPROVED` **e** uma referência não vazia em
+  `evidencia_aprovacao`.
+- `calcular_cpm_com_evidencia` recusa relações que incluam metadados de aprovação
+  incompletos ou pendentes. Sem metadados, continua aceitando chamadas genéricas
+  de simulação em memória; o chamador é responsável por selecionar as relações
+  que quer simular.
+- A ferramenta não abre nem verifica a referência documental de aprovação. O
+  identificador informado é uma declaração do chamador, não uma assinatura nem
+  uma validação de autoridade. Projetos precisam manter essa rastreabilidade na
+  camada de planejamento.
+
 ## Clientes em navegador: CORS restrito
 
 Apenas se o cliente executar MCP diretamente no navegador, configure no

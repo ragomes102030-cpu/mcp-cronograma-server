@@ -14,6 +14,64 @@ public_mcp = MCPServer(
 
 )
 
+_APROVADO_STATUS = {"APROVADA", "APPROVED"}
+
+
+def _estado_aprovacao_dependencias(dependencias: list[dict]) -> dict:
+    """Preserva status local quando fornecido; sem status, mantém o uso genérico."""
+    tem_status_explicito = any(
+        isinstance(dep, dict) and ("status" in dep or "evidencia_aprovacao" in dep)
+        for dep in dependencias
+    )
+    contagem: dict[str, int] = {}
+    aprovadas = 0
+    sem_status = 0
+    sem_evidencia = 0
+    status_nao_aprovado = 0
+    for dep in dependencias:
+        if not isinstance(dep, dict):
+            continue
+        bruto = dep.get("status")
+        status = str(bruto or "").strip().upper()
+        evidencia = str(dep.get("evidencia_aprovacao") or "").strip()
+        if not status:
+            sem_status += 1
+        else:
+            contagem[status] = contagem.get(status, 0) + 1
+        if not evidencia:
+            sem_evidencia += 1
+        if status in _APROVADO_STATUS and evidencia:
+            aprovadas += 1
+        elif status and status not in _APROVADO_STATUS:
+            status_nao_aprovado += 1
+    pendentes = max(0, len(dependencias) - aprovadas) if tem_status_explicito else 0
+    return {
+        "status_aprovacao_avaliado": tem_status_explicito,
+        "status_das_dependencias": contagem,
+        "dependencias_aprovadas": aprovadas,
+        "dependencias_pendentes_aprovacao": pendentes,
+        "dependencias_sem_status": sem_status if tem_status_explicito else 0,
+        "dependencias_sem_evidencia_aprovacao": sem_evidencia if tem_status_explicito else 0,
+        "dependencias_com_status_nao_aprovado": status_nao_aprovado if tem_status_explicito else 0,
+    }
+
+
+def _duracoes_pendentes(atividades: list[dict]) -> list[str]:
+    pendentes = []
+    for index, atividade in enumerate(atividades):
+        if not isinstance(atividade, dict):
+            pendentes.append(f"#{index + 1}")
+            continue
+        ident = str(atividade.get("id") or f"#{index + 1}").strip()
+        try:
+            duracao = float(atividade.get("duracao_dias"))
+        except (TypeError, ValueError):
+            pendentes.append(ident)
+            continue
+        if not math.isfinite(duracao) or not 0 < duracao <= 1e6:
+            pendentes.append(ident)
+    return pendentes
+
 @public_mcp.tool()
 def calcular_duracao_com_evidencia(
     quantidade: float, produtividade: float, unidade: str,
@@ -35,11 +93,37 @@ def calcular_duracao_com_evidencia(
 
 @public_mcp.tool()
 def calcular_cpm_com_evidencia(atividades: list[dict], dependencias: list[dict]) -> dict:
-    """CPM em memoria. TI/FS, II/SS, TT/FF, IT/SF; duracoes em dias, lag positivo ou negativo."""
+    """CPM em memoria; se status/evidencia_aprovacao vierem, exige ambos por aresta."""
     if not isinstance(atividades,list) or not isinstance(dependencias,list):
         raise ValueError("Forneca duas listas.")
     if not 1 <= len(atividades) <= 2000 or not 0 <= len(dependencias) <= 10000:
         raise ValueError("Limite: 1-2000 atividades, 0-10000 dependencias.")
+    estado_aprovacao = _estado_aprovacao_dependencias(dependencias)
+    if estado_aprovacao["status_aprovacao_avaliado"] and estado_aprovacao["dependencias_pendentes_aprovacao"]:
+        diagnostico = diagnosticar_rede_cpm(atividades, dependencias)
+        erros = list(diagnostico["erros"])
+        if estado_aprovacao["dependencias_com_status_nao_aprovado"] or estado_aprovacao["dependencias_sem_status"]:
+            erros.append({
+                "codigo": "DEPENDENCIA_NAO_APROVADA",
+                "dependencias_com_status_nao_aprovado": estado_aprovacao["dependencias_com_status_nao_aprovado"],
+                "dependencias_sem_status": estado_aprovacao["dependencias_sem_status"],
+            })
+        if estado_aprovacao["dependencias_sem_evidencia_aprovacao"]:
+            erros.append({
+                "codigo": "EVIDENCIA_APROVACAO_AUSENTE",
+                "dependencias_sem_evidencia_aprovacao": estado_aprovacao["dependencias_sem_evidencia_aprovacao"],
+            })
+        return {
+            **diagnostico,
+            **estado_aprovacao,
+            "rede_estrutural_valida": diagnostico["valid"],
+            "valid": False,
+            "pronto_para_cpm": False,
+            "erro": "Dependencias sem aprovacao rastreavel; CPM recusado",
+            "erros": erros,
+            "persistido": False,
+            "origem": "dados_da_chamada",
+        }
     dur: dict[str, float] = {}
     for a in atividades:
         if not isinstance(a,dict) or not str(a.get("id") or "").strip():
@@ -160,20 +244,23 @@ def calcular_cpm_com_evidencia(atividades: list[dict], dependencias: list[dict])
             "caminhos_criticos":caminhos_criticos,
             "caminhos_criticos_truncados":caminhos_truncados,
             "topologia_pronta_para_cpm": not sem_vinculo,
+            "pronto_para_cpm": not sem_vinculo,
             "origem":"dados_da_chamada","persistido":False,
             "premissa":"tempos relativos; calendario de trabalho nao aplicado"}
 
 @public_mcp.tool()
 def diagnosticar_rede_cpm(atividades: list[dict], dependencias: list[dict]) -> dict:
-    """Diagnostica a estrutura e sinaliza topologia com atividades isoladas, sem persistencia."""
+    """Diagnostica estrutura/topologia; valid nao aprova relacoes nem libera CPM."""
     erros: list[dict] = []
     if not isinstance(atividades, list) or not isinstance(dependencias, list):
         return {"valid": False, "erros": [{"codigo": "ENTRADA_INVALIDA"}],
                 "atividades_sem_vinculo": [], "topologia_pronta_para_cpm": False,
+                "pronto_para_cpm": False,
                 "persistido": False}
     if not 1 <= len(atividades) <= 2000 or len(dependencias) > 10000:
         return {"valid": False, "erros": [{"codigo": "LIMITE_EXCEDIDO"}],
                 "atividades_sem_vinculo": [], "topologia_pronta_para_cpm": False,
+                "pronto_para_cpm": False,
                 "persistido": False}
     ids: set[str] = set()
     for a in atividades:
@@ -214,10 +301,22 @@ def diagnosticar_rede_cpm(atividades: list[dict], dependencias: list[dict]) -> d
         erros.append({"codigo": "CICLO", "atividades_envolvidas_ou_bloqueadas": sorted(x for x in ids if grau[x] > 0)})
     if len(ids) > 1 and not dependencias:
         erros.append({"codigo": "REDE_SEM_DEPENDENCIAS"})
-    sem_vinculo = sorted(ids - vinculadas) if len(ids) > 1 else []
-    return {"valid": not erros, "erros": erros,
-            "atividades_sem_vinculo": sem_vinculo,
-            "topologia_pronta_para_cpm": not erros and not sem_vinculo,
+    atividades_sem_vinculo = sorted(ids - vinculadas) if len(ids) > 1 else []
+    duracoes_pendentes = _duracoes_pendentes(atividades)
+    estado_aprovacao = _estado_aprovacao_dependencias(dependencias)
+    valid = not erros
+    topologia_pronta_para_cpm = valid and not atividades_sem_vinculo
+    pronto_para_cpm = (
+        topologia_pronta_para_cpm
+        and not duracoes_pendentes
+        and not estado_aprovacao["dependencias_pendentes_aprovacao"]
+    )
+    return {"valid": valid, "erros": erros,
+            "atividades_sem_vinculo": atividades_sem_vinculo,
+            "topologia_pronta_para_cpm": topologia_pronta_para_cpm,
+            "atividades_sem_duracao": duracoes_pendentes,
+            **estado_aprovacao,
+            "pronto_para_cpm": pronto_para_cpm,
             "persistido": False, "origem": "dados_da_chamada"}
 
 

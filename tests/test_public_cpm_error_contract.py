@@ -41,3 +41,25 @@ def test_rede_valida_continua_calculando():
     assert resultado["duracao_projeto_dias"] == 5
     assert resultado["caminho_critico"] == ["A", "B"]
     assert resultado["persistido"] is False
+
+
+def test_cpm_recusa_dependencia_explicitamente_nao_aprovada():
+    dependencia = {**_dep("A", "B"), "status": "PROPOSTA_NAO_APROVADA"}
+
+    resultado = calcular_cpm_com_evidencia(ATIVIDADES, [dependencia])
+
+    assert resultado["valid"] is False
+    assert resultado["persistido"] is False
+    assert resultado["erro"] == "Dependencias sem aprovacao rastreavel; CPM recusado"
+    assert any(erro["codigo"] == "DEPENDENCIA_NAO_APROVADA" for erro in resultado["erros"])
+
+
+def test_cpm_recusa_aprovacao_sem_referencia_de_evidencia():
+    dependencia = {**_dep("A", "B"), "status": "APROVADA"}
+
+    resultado = calcular_cpm_com_evidencia(ATIVIDADES, [dependencia])
+
+    assert resultado["valid"] is False
+    assert resultado["persistido"] is False
+    assert resultado["erro"] == "Dependencias sem aprovacao rastreavel; CPM recusado"
+    assert any(erro["codigo"] == "EVIDENCIA_APROVACAO_AUSENTE" for erro in resultado["erros"])
