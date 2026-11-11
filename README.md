@@ -47,6 +47,16 @@ Passe `duracao_dias` diretamente, ou `duracao_otimista`/`duracao_provavel`/
 Toda dependência é validada contra ciclo na criação (`criar_dependencia`
 rejeita se fechar um ciclo na rede).
 
+### Diagnóstico da topologia pública
+
+`diagnosticar_rede_cpm` separa `valid` (IDs, referências e ciclos sem erro)
+de `topologia_pronta_para_cpm`. A segunda fica `false` se houver erro
+estrutural ou atividade isolada, e `atividades_sem_vinculo` lista os IDs que
+precisam ser revisados. Uma atividade independente pode ser intencional; o
+diagnóstico não inventa vínculos nem aprova a sequência. Essa flag cobre apenas
+a topologia da rede, não comprova fontes, durações, calendários ou liberação
+técnica da obra.
+
 ## O que NÃO é escopo deste servidor (v1)
 
 - **Custo/orçamento** (valores R$, composições de preço) — outro domínio,

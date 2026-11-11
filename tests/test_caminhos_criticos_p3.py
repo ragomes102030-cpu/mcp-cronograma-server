@@ -51,3 +51,4 @@ def test_unlinked_activity_is_not_invented_as_critical_link():
     assert r["duracao_projeto_dias"] == 5
     assert r["caminhos_criticos"] == [["C"]]
     assert r["atividades_sem_vinculo"] == ["C"]
+    assert r["topologia_pronta_para_cpm"] is False

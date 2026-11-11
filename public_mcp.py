@@ -159,17 +159,22 @@ def calcular_cpm_com_evidencia(atividades: list[dict], dependencias: list[dict])
             "caminho_critico":[r["id"] for r in resultados if r["critica"]],
             "caminhos_criticos":caminhos_criticos,
             "caminhos_criticos_truncados":caminhos_truncados,
+            "topologia_pronta_para_cpm": not sem_vinculo,
             "origem":"dados_da_chamada","persistido":False,
             "premissa":"tempos relativos; calendario de trabalho nao aplicado"}
 
 @public_mcp.tool()
 def diagnosticar_rede_cpm(atividades: list[dict], dependencias: list[dict]) -> dict:
-    """Diagnostica ciclos, referencias invalidas e atividades isoladas sem persistencia."""
+    """Diagnostica a estrutura e sinaliza topologia com atividades isoladas, sem persistencia."""
     erros: list[dict] = []
     if not isinstance(atividades, list) or not isinstance(dependencias, list):
-        return {"valid": False, "erros": [{"codigo": "ENTRADA_INVALIDA"}], "persistido": False}
+        return {"valid": False, "erros": [{"codigo": "ENTRADA_INVALIDA"}],
+                "atividades_sem_vinculo": [], "topologia_pronta_para_cpm": False,
+                "persistido": False}
     if not 1 <= len(atividades) <= 2000 or len(dependencias) > 10000:
-        return {"valid": False, "erros": [{"codigo": "LIMITE_EXCEDIDO"}], "persistido": False}
+        return {"valid": False, "erros": [{"codigo": "LIMITE_EXCEDIDO"}],
+                "atividades_sem_vinculo": [], "topologia_pronta_para_cpm": False,
+                "persistido": False}
     ids: set[str] = set()
     for a in atividades:
         if not isinstance(a, dict) or not str(a.get("id") or "").strip():
@@ -209,8 +214,10 @@ def diagnosticar_rede_cpm(atividades: list[dict], dependencias: list[dict]) -> d
         erros.append({"codigo": "CICLO", "atividades_envolvidas_ou_bloqueadas": sorted(x for x in ids if grau[x] > 0)})
     if len(ids) > 1 and not dependencias:
         erros.append({"codigo": "REDE_SEM_DEPENDENCIAS"})
+    sem_vinculo = sorted(ids - vinculadas) if len(ids) > 1 else []
     return {"valid": not erros, "erros": erros,
-            "atividades_sem_vinculo": sorted(ids - vinculadas) if len(ids) > 1 else [],
+            "atividades_sem_vinculo": sem_vinculo,
+            "topologia_pronta_para_cpm": not erros and not sem_vinculo,
             "persistido": False, "origem": "dados_da_chamada"}
 
 

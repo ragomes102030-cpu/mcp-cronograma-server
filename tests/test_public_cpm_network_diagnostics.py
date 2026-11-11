@@ -13,21 +13,25 @@ def test_cycle_is_structured():
     result = diagnosticar_rede_cpm(_activities(), [_dep("A", "B"), _dep("B", "A")])
     assert not result["valid"]
     assert any(e["codigo"] == "CICLO" for e in result["erros"])
+    assert result["topologia_pronta_para_cpm"] is False
     assert result["persistido"] is False
 
 
 def test_dangling_reference():
     result = diagnosticar_rede_cpm(_activities(), [_dep("A", "C")])
     assert any(e["codigo"] == "REFERENCIA_INEXISTENTE" for e in result["erros"])
+    assert result["topologia_pronta_para_cpm"] is False
 
 
 def test_valid_network():
     result = diagnosticar_rede_cpm(_activities(), [_dep("A", "B")])
     assert result["valid"]
     assert result["atividades_sem_vinculo"] == []
+    assert result["topologia_pronta_para_cpm"] is True
 
 
 def test_isolated_activity():
     result = diagnosticar_rede_cpm(_activities() + [{"id": "C", "duracao_dias": 1}], [_dep("A", "B")])
     assert result["valid"]
     assert result["atividades_sem_vinculo"] == ["C"]
+    assert result["topologia_pronta_para_cpm"] is False
